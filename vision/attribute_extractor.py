@@ -18,9 +18,9 @@ class AttributeExtractor:
     """
 
     GEMINI_URL = (
-        "https://generativelanguage.googleapis.com/v1beta/models"
-        "/gemini-2.0-flash:generateContent"
-    )
+    "https://generativelanguage.googleapis.com/v1beta/models"
+    "/gemini-2.5-flash:generateContent"
+)   
 
     PROMPT = """Eres el módulo de visión del sistema experto RECI, un tacho inteligente de reciclaje universitario en Ecuador.
 
@@ -116,7 +116,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             "generationConfig": {
                 "temperature":     0.1,
                 "topP":            0.8,
-                "maxOutputTokens": 500
+                "maxOutputTokens": 1024
             }
         }
 
@@ -125,7 +125,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         response = httpx.post(
             url,
             json=payload,
-            timeout=30.0
+            timeout=60.0
         )
         response.raise_for_status()
         data = response.json()
@@ -135,11 +135,23 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         texto = texto.strip()
 
         # Limpiar markdown si Gemini lo agrega
-        if texto.startswith("```"):
-            texto = texto.split("```")[1]
-            if texto.startswith("json"):
-                texto = texto[4:]
+        if "```" in texto:
+            partes = texto.split("```")
+            for parte in partes:
+                if "{" in parte:
+                    texto = parte
+                    if texto.startswith("json"):
+                        texto = texto[4:]
+                    break
+
+        # Extraer solo el JSON entre llaves
+        inicio = texto.find("{")
+        fin    = texto.rfind("}") + 1
+        if inicio != -1 and fin > inicio:
+            texto = texto[inicio:fin]
+
         texto = texto.strip()
+        print(f"  📝 Respuesta Gemini: {texto}")
 
         # Parsear JSON
         atributos = json.loads(texto)
