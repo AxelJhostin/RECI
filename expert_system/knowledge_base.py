@@ -327,6 +327,11 @@ class KnowledgeBase:
                           "rigidez": "flexible", "tapa": "sellado"},
                  "PLASTICO", 0.97,
                  "Metálico rectangular flexible sellado → envase de snack plástico metalizado, no lata"),
+        # Vaso de cartón cilíndrico — no siempre es cónico
+            Rule("R112", {"objeto_reconocido": "vaso_carton",
+                          "textura": "lisa_sin_brillo", "rigidez": "rigido"},
+                 "ORGANICO", 0.95,
+                 "Vaso de cartón con textura sin brillo → orgánico/papel sin importar forma"),
         ]
 
     def obtener_reglas(self):
