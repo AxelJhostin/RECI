@@ -2,8 +2,10 @@
 # Punto de entrada del sistema experto RECI
 # Simula el flujo completo: recibe atributos del ML y clasifica el objeto
 
+import json
 from expert_system.inference_engine import InferenceEngine
 from expert_system.statistics import RECIStatistics
+from expert_system.explanation import ExplanationReport
 
 # Instancia global de estadísticas
 stats = RECIStatistics()
@@ -17,6 +19,9 @@ def clasificar_objeto(atributos: dict):
     engine = InferenceEngine()
     valido = engine.cargar_hechos(atributos)
     conclusion, confianza, reglas = engine.ejecutar()
+
+    # Generar reporte técnico completo
+    reporte = ExplanationReport(engine)
 
     print(engine.obtener_explicacion())
 
@@ -39,7 +44,9 @@ def clasificar_objeto(atributos: dict):
     return {
         "conclusion": conclusion,
         "confianza":  confianza,
-        "hardware":   decision
+        "hardware":   decision,
+        "reporte":    reporte.a_dict(),
+        "payload":    reporte.payload_supabase()
     }
 
 
@@ -218,6 +225,19 @@ if __name__ == "__main__":
         print(f"  {emoji} {r['caso'][:45]:45} → "
               f"{r['conclusion']:12} ({r['confianza']*100:.1f}%)")
     print("█" * 60)
+
+    # Reporte técnico del último caso
+    print("\n" + "█" * 60)
+    print("  REPORTE TÉCNICO — ÚLTIMO CASO CLASIFICADO")
+    print("█" * 60)
+    engine_ultimo = InferenceEngine()
+    engine_ultimo.cargar_hechos(casos[-1]["atributos"])
+    engine_ultimo.ejecutar()
+    reporte_ultimo = ExplanationReport(engine_ultimo)
+    print(reporte_ultimo.resumen_consola())
+    print("\n  PAYLOAD SUPABASE (JSON):")
+    print(json.dumps(reporte_ultimo.payload_supabase(),
+                     ensure_ascii=False, indent=4))
 
     # Reporte de estadísticas
     print()
