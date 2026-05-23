@@ -12,6 +12,7 @@ class InferenceEngine:
         self.reglas_disparadas = []
         self.conclusion_final = None
         self.confianza_final = 0.0
+        self.distribucion = {}
 
     def cargar_hechos(self, resultado_ml: dict):
         """
@@ -22,6 +23,7 @@ class InferenceEngine:
         self.reglas_disparadas = []
         self.conclusion_final = None
         self.confianza_final = 0.0
+        self.distribucion = {}
         self.memoria.agregar_hechos_desde_ml(resultado_ml)
 
     def ejecutar(self):
@@ -49,25 +51,33 @@ class InferenceEngine:
                 self.reglas_disparadas.append(regla)
                 acumulador[regla.conclusion] += regla.confianza
 
-        # Elegir la conclusión con mayor confianza acumulada
-        hechos = self.memoria.obtener_todos()
-
-        # PRIORIDAD ABSOLUTA: si confianza ML es baja y objeto desconocido → DESCONOCIDO
+        # PRIORIDAD ABSOLUTA: objeto desconocido con baja confianza
         if (hechos.get("confianza_ml") == "baja" and
                 hechos.get("objeto_reconocido") == "desconocido"):
             self.conclusion_final = "DESCONOCIDO"
-            self.confianza_final = 0.0
+            self.confianza_final  = 0.0
 
         elif all(v == 0.0 for v in acumulador.values()):
             self.conclusion_final = "DESCONOCIDO"
-            self.confianza_final = 0.0
+            self.confianza_final  = 0.0
 
         else:
-            self.conclusion_final = max(acumulador, key=acumulador.get)
-            total = sum(acumulador.values())
-            self.confianza_final = round(
-                acumulador[self.conclusion_final] / total, 3
-            ) if total > 0 else 0.0
+            # Eliminar categorías con 0 para el cálculo
+            acumulador_activo = {k: v for k, v in acumulador.items() if v > 0}
+            total = sum(acumulador_activo.values())
+            self.conclusion_final = max(acumulador_activo, key=acumulador_activo.get)
+
+            # Confianza real = peso de la categoría ganadora vs el total
+            # Si todas las reglas apuntan a una sola categoría → confianza alta
+            # Si hay competencia entre categorías → confianza más baja
+            confianza_ganadora = acumulador_activo[self.conclusion_final]
+            self.confianza_final = round(confianza_ganadora / total, 3)
+
+            # Guardar distribución completa para explicación
+            self.distribucion = {
+                k: round(v / total, 3)
+                for k, v in acumulador_activo.items()
+            }
 
         return self.conclusion_final, self.confianza_final, self.reglas_disparadas
 
@@ -100,6 +110,14 @@ class InferenceEngine:
         lineas.append(f"\n  CONCLUSIÓN FINAL:  {self.conclusion_final}")
         lineas.append(f"  CONFIANZA:         {self.confianza_final * 100:.1f}%")
 
+        # Mostrar distribución si hubo competencia entre categorías
+        if self.distribucion and len(self.distribucion) > 1:
+            lineas.append(f"\n  DISTRIBUCIÓN DE CONFIANZA:")
+            for cat, peso in sorted(self.distribucion.items(),
+                                    key=lambda x: x[1], reverse=True):
+                barra = "█" * int(peso * 20)
+                lineas.append(f"    {cat:12} [{barra:20}] {peso*100:.1f}%")
+
         if self.conclusion_final == "DESCONOCIDO":
             lineas.append("\n  ⚠ Objeto no clasificable — se solicita segunda captura.")
         elif self.conclusion_final == "LATA":
@@ -121,7 +139,7 @@ class InferenceEngine:
             "DESCONOCIDO":  {"compuerta": "ninguna",   "led": "rojo",     "angulo_servo": 0,   "mensaje": "⚠ Objeto no reconocido — por favor intente de nuevo"},
         }
         return acciones.get(self.conclusion_final, acciones["DESCONOCIDO"])
-    
+
     def __repr__(self):
         return (f"InferenceEngine("
                 f"conclusion={self.conclusion_final}, "

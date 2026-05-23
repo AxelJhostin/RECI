@@ -166,6 +166,18 @@ class KnowledgeBase:
                  "Baja confianza y forma cilíndrica → probablemente plástico por ser el más común"),
             Rule("R72", {"objeto_reconocido": "desconocido", "confianza_ml": "baja"}, "DESCONOCIDO", 0.00,
                  "Objeto no reconocido con baja confianza → solicitar segunda captura"),
+        # ── Reglas por brillo sin tapa conocida ─────────────────
+            Rule("R80", {"transparencia": "alta", "brillo": "alto_nitido",
+                        "forma": "cilindrica_estandar", "rigidez": "rigido"}, "VIDRIO", 0.75,
+                "Transparente con brillo nítido de vidrio y cilíndrico rígido → probable vidrio"),
+
+            Rule("R81", {"transparencia": "alta", "brillo": "medio_difuso",
+                        "forma": "cilindrica_estandar", "rigidez": "rigido"}, "PLASTICO", 0.75,
+                "Transparente con brillo difuso cilíndrico rígido → probable plástico PET"),
+
+            Rule("R82", {"transparencia": "alta", "brillo": "alto_nitido",
+                        "forma": "cilindrica_delgada", "rigidez": "rigido"}, "PLASTICO", 0.70,
+                "Transparente nítido pero delgado → más probable plástico que vidrio"),
         ]
 
     def obtener_reglas(self):

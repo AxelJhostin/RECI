@@ -165,6 +165,20 @@ if __name__ == "__main__":
                 "rigidez":           "indefinido"
             }
         },
+        {
+            "nombre": "CASO AMBIGUO — Botella transparente sin tapa (¿vidrio o plástico?)",
+            "atributos": {
+                "objeto_reconocido": "desconocido",
+                "confianza_ml":      "media",
+                "transparencia":     "alta",
+                "color":             "transparente",
+                "forma":             "cilindrica_estandar",
+                "brillo":            "alto_nitido",
+                "tapa":              "sin_tapa",
+                "textura":           "lisa_brillante",
+                "rigidez":           "rigido"
+            }
+        },
     ]
 
     print("\n" + "█" * 60)
