@@ -180,6 +180,127 @@ class KnowledgeBase:
                 "Transparente nítido pero delgado → más probable plástico que vidrio"),
         ]
 
+        # ── NIVEL 5: Reglas para casos específicos del campus ────────────
+        # Objetos comunes en Manabí que necesitan reglas propias
+
+        self.reglas += [
+
+            # Sprite / 7UP — verde transparente plástico vs Club verde vidrio
+            Rule("R90", {"transparencia": "media", "color": "variado_vivo",
+                         "brillo": "medio_difuso", "tapa": "rosca_plastico"},
+                 "PLASTICO", 0.96,
+                 "Verde transparente con brillo difuso y tapa rosca → Sprite o 7UP plástico"),
+
+            Rule("R91", {"transparencia": "ninguna", "color": "verde_oscuro",
+                         "brillo": "alto_nitido", "tapa": "corona_metalica"},
+                 "VIDRIO", 0.97,
+                 "Verde oscuro opaco con brillo nítido y tapa corona → cerveza Club vidrio"),
+
+            Rule("R92", {"transparencia": "media", "color": "variado_vivo",
+                         "brillo": "alto_nitido", "tapa": "corona_metalica"},
+                 "VIDRIO", 0.94,
+                 "Verde con brillo nítido y tapa corona → probable vidrio aunque sea claro"),
+
+            # Pepsi azul oscuro — no confundir con vidrio oscuro
+            Rule("R93", {"color": "variado_vivo", "tapa": "rosca_plastico",
+                         "brillo": "medio_difuso", "rigidez": "rigido"},
+                 "PLASTICO", 0.93,
+                 "Color vivo con tapa rosca y brillo difuso → plástico con etiqueta (Pepsi, Fanta)"),
+
+            # Envase de snack metálico — no confundir con lata
+            Rule("R94", {"brillo": "metalico", "forma": "rectangular_plana",
+                         "rigidez": "flexible"},
+                 "PLASTICO", 0.91,
+                 "Metálico pero rectangular y flexible → envase de snack plástico metalizado"),
+
+            Rule("R95", {"brillo": "metalico", "forma": "cilindrica_estandar",
+                         "rigidez": "rigido", "tapa": "sellado"},
+                 "LATA", 0.98,
+                 "Metálico cilíndrico rígido sellado → lata de aluminio, no snack"),
+
+            # Pitillo / sorbete solo
+            Rule("R96", {"forma": "cilindrica_delgada", "transparencia": "media",
+                         "rigidez": "rigido", "textura": "lisa_brillante",
+                         "tapa": "sin_tapa"},
+                 "PLASTICO", 0.89,
+                 "Cilíndrico muy delgado semitransparente sin tapa → pitillo o sorbete plástico"),
+
+            # Yogur con tapa de aluminio — no confundir con lata
+            Rule("R97", {"color": "blanco_opaco", "forma": "cilindrica_ancha",
+                         "brillo": "medio_difuso", "rigidez": "rigido"},
+                 "PLASTICO", 0.95,
+                 "Blanco opaco cilíndrico ancho con brillo medio → yogur plástico (Toni/Rey Leche)"),
+
+            # Botella de salsa con contenido visible
+            Rule("R98", {"transparencia": "media", "color": "variado_vivo",
+                         "forma": "cilindrica_estandar", "tapa": "twist_off_metalica",
+                         "brillo": "alto_nitido"},
+                 "VIDRIO", 0.93,
+                 "Semitransparente con contenido de color y tapa twist-off → salsa en vidrio"),
+
+            # Objeto muy pequeño — casi nunca es vidrio
+            Rule("R99", {"forma": "cilindrica_delgada", "confianza_ml": "baja",
+                         "transparencia": "alta"},
+                 "PLASTICO", 0.72,
+                 "Objeto pequeño y delgado transparente con baja confianza → más probable plástico"),
+
+            # Botella de agua grande — mismo material que pequeña
+            Rule("R100", {"objeto_reconocido": "botella_agua", "forma": "cilindrica_ancha",
+                          "confianza_ml": "alta"},
+                 "PLASTICO", 0.97,
+                 "Botella de agua grande (1L-2L) identificada → plástico PET"),
+
+            # Currimcho / 24-7 / Switch — botellas alcohólicas pequeñas
+            Rule("R101", {"objeto_reconocido": "botella_alcoholica_plastico",
+                          "confianza_ml": "media", "tapa": "rosca_plastico"},
+                 "PLASTICO", 0.94,
+                 "Botella alcohólica económica con tapa rosca → Switch/Currimcho/24-7 plástico"),
+
+            Rule("R102", {"color": "variado_vivo", "forma": "cilindrica_delgada",
+                          "tapa": "rosca_plastico", "transparencia": "alta"},
+                 "PLASTICO", 0.92,
+                 "Botella delgada transparente con etiqueta colorida → bebida alcohólica o energizante plástico"),
+
+            # Monster negro — plástico opaco oscuro
+            Rule("R103", {"color": "negro", "brillo": "medio_difuso",
+                          "forma": "cilindrica_estandar", "tapa": "rosca_plastico"},
+                 "PLASTICO", 0.94,
+                 "Negro opaco con tapa rosca → Monster u otra bebida en plástico oscuro"),
+
+            # Funda transparente — no confundir con botella
+            Rule("R104", {"transparencia": "alta", "rigidez": "flexible",
+                          "forma": "irregular"},
+                 "PLASTICO", 0.93,
+                 "Transparente flexible e irregular → funda plástica transparente"),
+
+            # Cartón de jugo — rectangular, no cilíndrico
+            Rule("R105", {"forma": "rectangular_plana", "textura": "lisa_sin_brillo",
+                          "rigidez": "rigido", "transparencia": "ninguna"},
+                 "ORGANICO", 0.91,
+                 "Rectangular liso sin brillo y rígido → cartón de jugo o caja de cartón"),
+
+            # Cáscara de banano específica — marrón oscuro
+            Rule("R106", {"color": "marron_tierra", "forma": "irregular",
+                          "textura": "rugosa", "rigidez": "flexible"},
+                 "ORGANICO", 0.97,
+                 "Marrón irregular rugoso y flexible → cáscara de banano u orgánico"),
+
+            # Refuerzo: vidrio siempre rígido — si es flexible no puede ser vidrio
+            Rule("R107", {"rigidez": "flexible", "brillo": "alto_nitido"},
+                 "PLASTICO", 0.88,
+                 "Flexible aunque tenga brillo alto → no puede ser vidrio, es plástico flexible"),
+
+            # Refuerzo: tapa corona = casi siempre vidrio
+            Rule("R108", {"tapa": "corona_metalica"},
+                 "VIDRIO", 0.90,
+                 "Tapa corona metálica → casi exclusivamente botellas de vidrio"),
+
+            # Refuerzo: tapa rosca plástica = nunca vidrio
+            Rule("R109", {"tapa": "rosca_plastico", "rigidez": "rigido"},
+                 "PLASTICO", 0.88,
+                 "Tapa rosca plástica con objeto rígido → plástico PET, nunca vidrio"),
+        ]
+
     def obtener_reglas(self):
         return self.reglas
 
