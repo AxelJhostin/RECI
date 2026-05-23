@@ -3,6 +3,10 @@
 # Simula el flujo completo: recibe atributos del ML y clasifica el objeto
 
 from expert_system.inference_engine import InferenceEngine
+from expert_system.statistics import RECIStatistics
+
+# Instancia global de estadísticas
+stats = RECIStatistics()
 
 def clasificar_objeto(atributos: dict):
     """
@@ -11,7 +15,7 @@ def clasificar_objeto(atributos: dict):
     y retorna la decisión del sistema experto.
     """
     engine = InferenceEngine()
-    engine.cargar_hechos(atributos)
+    valido = engine.cargar_hechos(atributos)
     conclusion, confianza, reglas = engine.ejecutar()
 
     print(engine.obtener_explicacion())
@@ -24,16 +28,23 @@ def clasificar_objeto(atributos: dict):
     print(f"    Mensaje   : {decision['mensaje']}")
     print()
 
+    # Registrar en estadísticas
+    stats.registrar(
+        conclusion        = conclusion,
+        confianza         = confianza,
+        objeto_reconocido = atributos.get("objeto_reconocido"),
+        reglas_disparadas = len(reglas)
+    )
+
     return {
-        "conclusion":  conclusion,
-        "confianza":   confianza,
-        "hardware":    decision
+        "conclusion": conclusion,
+        "confianza":  confianza,
+        "hardware":   decision
     }
 
 
 # ─────────────────────────────────────────────
 # CASOS DE PRUEBA SIMULADOS
-# Estos simulan lo que el modelo ML entregaría
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -96,7 +107,7 @@ if __name__ == "__main__":
             }
         },
         {
-            "nombre": "CASO DIFÍCIL — Botella PET transparente (podría confundirse con vidrio)",
+            "nombre": "CASO DIFÍCIL — Botella PET transparente",
             "atributos": {
                 "objeto_reconocido": "botella_agua",
                 "confianza_ml":      "media",
@@ -166,7 +177,7 @@ if __name__ == "__main__":
             }
         },
         {
-            "nombre": "CASO AMBIGUO — Botella transparente sin tapa (¿vidrio o plástico?)",
+            "nombre": "CASO AMBIGUO — Botella transparente sin tapa",
             "atributos": {
                 "objeto_reconocido": "desconocido",
                 "confianza_ml":      "media",
@@ -197,12 +208,17 @@ if __name__ == "__main__":
             "confianza":  resultado["confianza"]
         })
 
-    # Resumen final
+    # Resumen de clasificaciones
     print("\n" + "█" * 60)
     print("  RESUMEN DE CLASIFICACIONES")
     print("█" * 60)
     for r in resultados:
         emoji = {"VIDRIO": "🔵", "PLASTICO": "🟢", "ORGANICO": "🟡",
                  "LATA": "🔴", "DESCONOCIDO": "⚪"}.get(r["conclusion"], "⚪")
-        print(f"  {emoji} {r['caso'][:45]:45} → {r['conclusion']:12} ({r['confianza']*100:.1f}%)")
-    print("█" * 60 + "\n")
+        print(f"  {emoji} {r['caso'][:45]:45} → "
+              f"{r['conclusion']:12} ({r['confianza']*100:.1f}%)")
+    print("█" * 60)
+
+    # Reporte de estadísticas
+    print()
+    print(stats.reporte())
