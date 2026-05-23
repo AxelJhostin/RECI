@@ -40,13 +40,26 @@ class Rule:
         confianza   : peso base de la regla (0.0 a 1.0)
         explicacion : texto legible que justifica la regla
         cf          : factor de certeza explícito (si None, usa confianza como CF)
+        
+        ESPECIFICIDAD AUTOMÁTICA:
+        Reglas con más condiciones reciben un bonus automático de CF.
+        Una regla con 5 condiciones es más confiable que una con 2
+        del mismo CF base — refleja el principio de "longest matching strategy".
+        Bonus: (num_condiciones - 1) * 0.01, máximo CF = 1.0
         """
-        self.nombre      = nombre
-        self.condiciones = condiciones
-        self.conclusion  = conclusion
-        self.confianza   = confianza
-        self.explicacion = explicacion
-        self.cf          = cf if cf is not None else confianza
+        self.nombre        = nombre
+        self.condiciones   = condiciones
+        self.conclusion    = conclusion
+        self.confianza     = confianza
+        self.explicacion   = explicacion
+        self.especificidad = len(condiciones)
+
+        # CF base
+        cf_base = cf if cf is not None else confianza
+
+        # Bonus por especificidad — más condiciones = más específica = más confiable
+        bonus_especificidad = (self.especificidad - 1) * 0.01
+        self.cf = round(min(1.0, cf_base + bonus_especificidad), 4)
 
     def evaluar(self, hechos):
         """
@@ -60,7 +73,8 @@ class Rule:
 
     def __repr__(self):
         conds = " Y ".join(f"{k}={v}" for k, v in self.condiciones.items())
-        return f"[{self.nombre}] SI {conds} → {self.conclusion} (CF: {self.cf})"
+        return (f"[{self.nombre}] SI {conds} → {self.conclusion} "
+                f"(CF: {self.cf}, especificidad: {self.especificidad})")
 
 # ─────────────────────────────────────────────
 # BASE DE CONOCIMIENTO

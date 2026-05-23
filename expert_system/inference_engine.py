@@ -1,28 +1,31 @@
 # expert_system/inference_engine.py
 # Motor de inferencia del sistema experto RECI
-# Implementa encadenamiento hacia adelante (forward chaining)
+# Coordina: forward chaining, backward chaining, CF MYCIN, meta-reglas, validación
 
 from expert_system.knowledge_base import KnowledgeBase
 from expert_system.working_memory import WorkingMemory
 from expert_system.validator import AttributeValidator
 from expert_system.backward_chaining import BackwardChainingEngine
 from expert_system.certainty_factor import CertaintyFactor
+from expert_system.meta_rules import MetaRuleEngine
 
 class InferenceEngine:
     def __init__(self):
-        self.kb = KnowledgeBase()
-        self.memoria = WorkingMemory()
-        self.reglas_disparadas = []
-        self.conclusion_final = None
-        self.confianza_final = 0.0
-        self.distribucion = {}
-        self.validator = AttributeValidator() 
-        self.errores_validacion = []           
+        self.kb                      = KnowledgeBase()
+        self.memoria                 = WorkingMemory()
+        self.reglas_disparadas       = []
+        self.conclusion_final        = None
+        self.confianza_final         = 0.0
+        self.distribucion            = {}
+        self.validator               = AttributeValidator()
+        self.errores_validacion      = []
         self.advertencias_validacion = []
-        self.backward_engine = BackwardChainingEngine()
-        self.resultado_backward = None
-        self.score_backward = 0.0
-        self.cf_por_categoria = {}
+        self.backward_engine         = BackwardChainingEngine()
+        self.resultado_backward      = None
+        self.score_backward          = 0.0
+        self.cf_por_categoria        = {}
+        self.meta_engine             = MetaRuleEngine()
+        self.contexto_meta           = {}
 
     def cargar_hechos(self, resultado_ml: dict):
         """
@@ -30,69 +33,61 @@ class InferenceEngine:
         en la memoria de trabajo.
         """
         self.memoria.limpiar()
-        self.reglas_disparadas = []
-        self.conclusion_final = None
-        self.confianza_final = 0.0
-        self.distribucion = {}
-        self.errores_validacion = []         
-        self.advertencias_validacion = []    
+        self.reglas_disparadas       = []
+        self.conclusion_final        = None
+        self.confianza_final         = 0.0
+        self.distribucion            = {}
+        self.errores_validacion      = []
+        self.advertencias_validacion = []
+        self.resultado_backward      = None
+        self.score_backward          = 0.0
+        self.cf_por_categoria        = {}
+        self.contexto_meta           = {}
 
         # Validar antes de cargar
         es_valido, errores, advertencias = self.validator.validar(resultado_ml)
-        self.errores_validacion = errores
+        self.errores_validacion      = errores
         self.advertencias_validacion = advertencias
-        self.resultado_backward = None
-        self.score_backward = 0.0
 
         if not es_valido:
-            # Bloquear inferencia si hay errores críticos
             self.conclusion_final = "DESCONOCIDO"
-            self.confianza_final = 0.0
+            self.confianza_final  = 0.0
             return False
 
         self.memoria.agregar_hechos_desde_ml(resultado_ml)
-        return True 
+        return True
 
     def ejecutar(self):
         """
-        Ciclo principal de inferencia — encadenamiento hacia adelante.
-        Evalúa todas las reglas contra los hechos actuales,
-        acumula las que se cumplen y elige la conclusión
-        con mayor confianza acumulada.
+        Ciclo principal de inferencia.
+        Orden: meta-reglas → forward chaining → CF MYCIN → ajustes meta → backward chaining
         """
         if self.errores_validacion:
             return self.conclusion_final, self.confianza_final, []
-    
+
         hechos = self.memoria.obtener_todos()
         reglas = self.kb.obtener_reglas()
 
-        # Acumulador de confianza por categoría
-        acumulador = {
-            "VIDRIO":       0.0,
-            "PLASTICO":     0.0,
-            "ORGANICO":     0.0,
-            "LATA":         0.0,
-            "DESCONOCIDO":  0.0
-        }
+        # ── 1. Ejecutar meta-reglas ───────────────────────────────
+        self.contexto_meta = self.meta_engine.ejecutar(hechos)
 
-        # Evaluar cada regla contra los hechos
+        # ── 2. Forward chaining — evaluar reglas ─────────────────
         for regla in reglas:
             if regla.evaluar(hechos):
                 self.reglas_disparadas.append(regla)
-                acumulador[regla.conclusion] += regla.confianza
 
-        # PRIORIDAD ABSOLUTA: objeto desconocido con baja confianza
+        # ── 3. Prioridad absoluta: desconocido con baja confianza ─
         if (hechos.get("confianza_ml") == "baja" and
                 hechos.get("objeto_reconocido") == "desconocido"):
             self.conclusion_final = "DESCONOCIDO"
             self.confianza_final  = 0.0
 
-        elif all(v == 0.0 for v in acumulador.values()):
+        elif not self.reglas_disparadas:
             self.conclusion_final = "DESCONOCIDO"
             self.confianza_final  = 0.0
 
         else:
-            # ── Factor de Certeza combinado estilo MYCIN ──────────
+            # ── 4. CF MYCIN ───────────────────────────────────────
             categorias = ["VIDRIO", "PLASTICO", "ORGANICO", "LATA", "DESCONOCIDO"]
             self.cf_por_categoria = CertaintyFactor.comparar_categorias(
                 self.reglas_disparadas, categorias)
@@ -101,26 +96,57 @@ class InferenceEngine:
                 self.conclusion_final = "DESCONOCIDO"
                 self.confianza_final  = 0.0
             else:
-                # La categoría con mayor CF combinado gana
-                self.conclusion_final = list(self.cf_por_categoria.keys())[0]
-                self.confianza_final  = round(
-                    self.cf_por_categoria[self.conclusion_final], 3)
+                # ── 5. Aplicar ajustes de meta-reglas ────────────
+                cf_ajustado = dict(self.cf_por_categoria)
 
-                # Guardar distribución para explicación
-                self.distribucion = {
-                    k: round(v, 3)
-                    for k, v in self.cf_por_categoria.items()
-                }
-        
-        # ── Encadenamiento hacia atrás como verificación ─────────
-        # Verifica si la conclusión del forward chaining
-        # es consistente con el backward chaining
-        hechos_actuales = self.memoria.obtener_todos()
-        resultado_bw, score_bw, _ = self.backward_engine.ejecutar(hechos_actuales)
-        self.resultado_backward = resultado_bw
-        self.score_backward = score_bw
+                # Excluir categorías prohibidas
+                for cat in self.contexto_meta.get("excluir_categorias", []):
+                    cf_ajustado.pop(cat, None)
 
-        # Si backward contradice forward con alta confianza → advertir
+                # Aplicar factor de prioridad
+                cat_prioritaria = self.contexto_meta.get("priorizar_categoria")
+                factor          = self.contexto_meta.get("factor_prioridad", 1.0)
+                if cat_prioritaria and cat_prioritaria in cf_ajustado:
+                    cf_ajustado[cat_prioritaria] = min(
+                        1.0, cf_ajustado[cat_prioritaria] * factor)
+
+                # Aplicar sesgos
+                sesgo_p = self.contexto_meta.get("sesgo_plastico", 0)
+                sesgo_o = self.contexto_meta.get("sesgo_organico", 0)
+                if sesgo_p > 0 and "PLASTICO" in cf_ajustado:
+                    cf_ajustado["PLASTICO"] = min(
+                        1.0, cf_ajustado["PLASTICO"] + sesgo_p)
+                if sesgo_o > 0 and "ORGANICO" in cf_ajustado:
+                    cf_ajustado["ORGANICO"] = min(
+                        1.0, cf_ajustado["ORGANICO"] + sesgo_o)
+
+                if not cf_ajustado:
+                    self.conclusion_final = "DESCONOCIDO"
+                    self.confianza_final  = 0.0
+                else:
+                    mejor_cat = max(cf_ajustado, key=cf_ajustado.get)
+                    mejor_cf  = cf_ajustado[mejor_cat]
+                    umbral    = self.contexto_meta.get("umbral_minimo_cf", 0.0)
+
+                    # Modo cauteloso — si CF no supera umbral → DESCONOCIDO
+                    if self.contexto_meta.get("modo_cauteloso") and mejor_cf < umbral:
+                        self.conclusion_final = "DESCONOCIDO"
+                        self.confianza_final  = 0.0
+                    else:
+                        self.conclusion_final = mejor_cat
+                        self.confianza_final  = round(mejor_cf, 3)
+
+                    # Distribución ajustada
+                    self.distribucion = {
+                        k: round(v, 3) for k, v in cf_ajustado.items()
+                    }
+
+        # ── 6. Backward chaining — verificación ──────────────────
+        resultado_bw, score_bw, _ = self.backward_engine.ejecutar(hechos)
+        self.resultado_backward   = resultado_bw
+        self.score_backward       = score_bw
+
+        # Advertir si backward contradice forward con alta confianza
         if (resultado_bw and
                 self.conclusion_final not in ["DESCONOCIDO", "LATA"] and
                 resultado_bw != self.conclusion_final and
@@ -143,8 +169,7 @@ class InferenceEngine:
 
     def obtener_explicacion(self):
         """
-        Genera una explicación legible del razonamiento:
-        qué reglas se dispararon y por qué se llegó a esa conclusión.
+        Genera explicación legible del razonamiento completo.
         """
         if not self.conclusion_final:
             return "No se ha ejecutado ninguna inferencia todavía."
@@ -154,29 +179,40 @@ class InferenceEngine:
         lineas.append("  SISTEMA EXPERTO RECI — EXPLICACIÓN DEL RAZONAMIENTO")
         lineas.append("=" * 60)
 
-        # Mostrar advertencias de validación si existen
+        # Advertencias de validación
         if self.advertencias_validacion:
             lineas.append(f"\n  ⚠ ADVERTENCIAS DE VALIDACIÓN:")
             for a in self.advertencias_validacion:
                 lineas.append(f"    • {a}")
 
+        # Meta-reglas aplicadas
+        if self.contexto_meta.get("meta_reglas_aplicadas"):
+            lineas.append(f"\n  META-REGLAS APLICADAS:")
+            for mr in self.contexto_meta["meta_reglas_aplicadas"]:
+                lineas.append(f"    ⚙ {mr}")
+            if self.contexto_meta.get("nota"):
+                lineas.append(f"    → {self.contexto_meta['nota']}")
+
+        # Hechos analizados
         lineas.append(f"\n  HECHOS ANALIZADOS:")
         for atributo, valor in self.memoria.obtener_todos().items():
             lineas.append(f"    • {atributo:25} = {valor}")
 
+        # Reglas disparadas
         lineas.append(f"\n  REGLAS DISPARADAS ({len(self.reglas_disparadas)}):")
         if self.reglas_disparadas:
             for regla in self.reglas_disparadas:
                 lineas.append(f"    ✓ [{regla.nombre}] → {regla.conclusion} "
-                            f"(peso: {regla.confianza})")
+                             f"(CF: {regla.cf:.4f}, esp: {regla.especificidad})")
                 lineas.append(f"      {regla.explicacion}")
         else:
             lineas.append("    Ninguna regla se disparó.")
 
+        # Conclusión
         lineas.append(f"\n  CONCLUSIÓN FINAL:  {self.conclusion_final}")
         lineas.append(f"  CONFIANZA:         {self.confianza_final * 100:.1f}%")
 
-        # Mostrar distribución si hubo competencia entre categorías
+        # Distribución de confianza
         if self.distribucion and len(self.distribucion) > 1:
             lineas.append(f"\n  DISTRIBUCIÓN DE CONFIANZA:")
             for cat, peso in sorted(self.distribucion.items(),
@@ -191,7 +227,7 @@ class InferenceEngine:
 
         lineas.append("=" * 60)
 
-        # Resultado del encadenamiento hacia atrás
+        # Backward chaining
         if self.resultado_backward:
             consistente = self.resultado_backward == self.conclusion_final
             icono = "✅" if consistente else "⚠"
@@ -204,7 +240,7 @@ class InferenceEngine:
             else:
                 lineas.append(f"    ⚠ Discrepancia — revisar con precaución")
 
-        # Factor de certeza por categoría
+        # CF por categoría
         if self.cf_por_categoria:
             lineas.append(f"\n  FACTOR DE CERTEZA (CF) POR CATEGORÍA:")
             for cat, cf in self.cf_por_categoria.items():
@@ -214,20 +250,24 @@ class InferenceEngine:
                          "ORGANICO": "🟡", "LATA": "🔴"}.get(cat, "⚪")
                 lineas.append(f"    {emoji} {cat:12} CF={cf:.4f} "
                              f"[{barra:20}] {interpretacion}")
-        
+
         return "\n".join(lineas)
 
     def decision_hardware(self):
         """
-        Traduce la conclusión a la instrucción física
-        que recibirá el Raspberry Pi para mover el servo.
+        Traduce la conclusión a instrucción física para el Raspberry Pi.
         """
         acciones = {
-            "VIDRIO":       {"compuerta": "izquierda", "led": "azul",     "angulo_servo": 45,  "mensaje": "VIDRIO detectado — abriendo compartimento izquierdo"},
-            "PLASTICO":     {"compuerta": "derecha",   "led": "verde",    "angulo_servo": 135, "mensaje": "PLÁSTICO detectado — abriendo compartimento derecho"},
-            "ORGANICO":     {"compuerta": "ninguna",   "led": "rojo",     "angulo_servo": 0,   "mensaje": "⚠ Orgánico o papel — este objeto no pertenece a este tacho"},
-            "LATA":         {"compuerta": "ninguna",   "led": "rojo",     "angulo_servo": 0,   "mensaje": "⚠ Lata detectada — este objeto no pertenece a este tacho"},
-            "DESCONOCIDO":  {"compuerta": "ninguna",   "led": "rojo",     "angulo_servo": 0,   "mensaje": "⚠ Objeto no reconocido — por favor intente de nuevo"},
+            "VIDRIO":      {"compuerta": "izquierda", "led": "azul",
+                           "angulo_servo": 45,  "mensaje": "VIDRIO detectado — abriendo compartimento izquierdo"},
+            "PLASTICO":    {"compuerta": "derecha",   "led": "verde",
+                           "angulo_servo": 135, "mensaje": "PLÁSTICO detectado — abriendo compartimento derecho"},
+            "ORGANICO":    {"compuerta": "ninguna",   "led": "rojo",
+                           "angulo_servo": 0,   "mensaje": "⚠ Orgánico o papel — este objeto no pertenece a este tacho"},
+            "LATA":        {"compuerta": "ninguna",   "led": "rojo",
+                           "angulo_servo": 0,   "mensaje": "⚠ Lata detectada — este objeto no pertenece a este tacho"},
+            "DESCONOCIDO": {"compuerta": "ninguna",   "led": "rojo",
+                           "angulo_servo": 0,   "mensaje": "⚠ Objeto no reconocido — por favor intente de nuevo"},
         }
         return acciones.get(self.conclusion_final, acciones["DESCONOCIDO"])
 
