@@ -5,6 +5,7 @@
 from expert_system.knowledge_base import KnowledgeBase
 from expert_system.working_memory import WorkingMemory
 from expert_system.validator import AttributeValidator
+from expert_system.backward_chaining import BackwardChainingEngine
 
 class InferenceEngine:
     def __init__(self):
@@ -17,6 +18,9 @@ class InferenceEngine:
         self.validator = AttributeValidator() 
         self.errores_validacion = []           
         self.advertencias_validacion = []
+        self.backward_engine = BackwardChainingEngine()
+        self.resultado_backward = None
+        self.score_backward = 0.0
 
     def cargar_hechos(self, resultado_ml: dict):
         """
@@ -35,6 +39,8 @@ class InferenceEngine:
         es_valido, errores, advertencias = self.validator.validar(resultado_ml)
         self.errores_validacion = errores
         self.advertencias_validacion = advertencias
+        self.resultado_backward = None
+        self.score_backward = 0.0
 
         if not es_valido:
             # Bloquear inferencia si hay errores críticos
@@ -100,6 +106,33 @@ class InferenceEngine:
                 k: round(v / total, 3)
                 for k, v in acumulador_activo.items()
             }
+        
+        # ── Encadenamiento hacia atrás como verificación ─────────
+        # Verifica si la conclusión del forward chaining
+        # es consistente con el backward chaining
+        hechos_actuales = self.memoria.obtener_todos()
+        resultado_bw, score_bw, _ = self.backward_engine.ejecutar(hechos_actuales)
+        self.resultado_backward = resultado_bw
+        self.score_backward = score_bw
+
+        # Si backward contradice forward con alta confianza → advertir
+        if (resultado_bw and
+                self.conclusion_final not in ["DESCONOCIDO", "LATA"] and
+                resultado_bw != self.conclusion_final and
+                score_bw > 0.80):
+            self.advertencias_validacion.append(
+                type('Advertencia', (), {
+                    '__repr__': lambda self: (
+                        f"[ADVERTENCIA] backward_chaining: "
+                        f"Forward dice {self.conclusion_fw} pero "
+                        f"Backward sugiere {self.resultado_bw} "
+                        f"(score: {self.score_bw*100:.1f}%)"
+                    ),
+                    'conclusion_fw': self.conclusion_final,
+                    'resultado_bw':  resultado_bw,
+                    'score_bw':      score_bw
+                })()
+            )
 
         return self.conclusion_final, self.confianza_final, self.reglas_disparadas
 
@@ -152,6 +185,20 @@ class InferenceEngine:
             lineas.append("\n  ⚠ Lata detectada — no pertenece a ningún compartimento RECI.")
 
         lineas.append("=" * 60)
+
+        # Resultado del encadenamiento hacia atrás
+        if self.resultado_backward:
+            consistente = self.resultado_backward == self.conclusion_final
+            icono = "✅" if consistente else "⚠"
+            lineas.append(f"\n  VERIFICACIÓN HACIA ATRÁS:")
+            lineas.append(f"    {icono} Backward chaining: "
+                         f"{self.resultado_backward} "
+                         f"(score: {self.score_backward*100:.1f}%)")
+            if consistente:
+                lineas.append(f"    ✅ Consistente con la conclusión forward")
+            else:
+                lineas.append(f"    ⚠ Discrepancia — revisar con precaución")
+
         return "\n".join(lineas)
 
     def decision_hardware(self):
