@@ -6,6 +6,7 @@ from expert_system.knowledge_base import KnowledgeBase
 from expert_system.working_memory import WorkingMemory
 from expert_system.validator import AttributeValidator
 from expert_system.backward_chaining import BackwardChainingEngine
+from expert_system.certainty_factor import CertaintyFactor
 
 class InferenceEngine:
     def __init__(self):
@@ -21,6 +22,7 @@ class InferenceEngine:
         self.backward_engine = BackwardChainingEngine()
         self.resultado_backward = None
         self.score_backward = 0.0
+        self.cf_por_categoria = {}
 
     def cargar_hechos(self, resultado_ml: dict):
         """
@@ -90,22 +92,25 @@ class InferenceEngine:
             self.confianza_final  = 0.0
 
         else:
-            # Eliminar categorías con 0 para el cálculo
-            acumulador_activo = {k: v for k, v in acumulador.items() if v > 0}
-            total = sum(acumulador_activo.values())
-            self.conclusion_final = max(acumulador_activo, key=acumulador_activo.get)
+            # ── Factor de Certeza combinado estilo MYCIN ──────────
+            categorias = ["VIDRIO", "PLASTICO", "ORGANICO", "LATA", "DESCONOCIDO"]
+            self.cf_por_categoria = CertaintyFactor.comparar_categorias(
+                self.reglas_disparadas, categorias)
 
-            # Confianza real = peso de la categoría ganadora vs el total
-            # Si todas las reglas apuntan a una sola categoría → confianza alta
-            # Si hay competencia entre categorías → confianza más baja
-            confianza_ganadora = acumulador_activo[self.conclusion_final]
-            self.confianza_final = round(confianza_ganadora / total, 3)
+            if not self.cf_por_categoria:
+                self.conclusion_final = "DESCONOCIDO"
+                self.confianza_final  = 0.0
+            else:
+                # La categoría con mayor CF combinado gana
+                self.conclusion_final = list(self.cf_por_categoria.keys())[0]
+                self.confianza_final  = round(
+                    self.cf_por_categoria[self.conclusion_final], 3)
 
-            # Guardar distribución completa para explicación
-            self.distribucion = {
-                k: round(v / total, 3)
-                for k, v in acumulador_activo.items()
-            }
+                # Guardar distribución para explicación
+                self.distribucion = {
+                    k: round(v, 3)
+                    for k, v in self.cf_por_categoria.items()
+                }
         
         # ── Encadenamiento hacia atrás como verificación ─────────
         # Verifica si la conclusión del forward chaining
@@ -199,6 +204,17 @@ class InferenceEngine:
             else:
                 lineas.append(f"    ⚠ Discrepancia — revisar con precaución")
 
+        # Factor de certeza por categoría
+        if self.cf_por_categoria:
+            lineas.append(f"\n  FACTOR DE CERTEZA (CF) POR CATEGORÍA:")
+            for cat, cf in self.cf_por_categoria.items():
+                interpretacion = CertaintyFactor.interpretar(cf)
+                barra = "█" * int(cf * 20)
+                emoji = {"VIDRIO": "🔵", "PLASTICO": "🟢",
+                         "ORGANICO": "🟡", "LATA": "🔴"}.get(cat, "⚪")
+                lineas.append(f"    {emoji} {cat:12} CF={cf:.4f} "
+                             f"[{barra:20}] {interpretacion}")
+        
         return "\n".join(lineas)
 
     def decision_hardware(self):

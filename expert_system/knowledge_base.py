@@ -32,19 +32,21 @@ ATRIBUTOS = {
 # ─────────────────────────────────────────────
 
 class Rule:
-    def __init__(self, nombre, condiciones, conclusion, confianza, explicacion):
+    def __init__(self, nombre, condiciones, conclusion, confianza, explicacion, cf=None):
         """
         nombre      : identificador único de la regla
         condiciones : dict con atributo:valor que deben cumplirse
         conclusion  : resultado ("VIDRIO", "PLASTICO", "ORGANICO", "LATA", "DESCONOCIDO")
-        confianza   : peso de la regla (0.0 a 1.0)
+        confianza   : peso base de la regla (0.0 a 1.0)
         explicacion : texto legible que justifica la regla
+        cf          : factor de certeza explícito (si None, usa confianza como CF)
         """
         self.nombre      = nombre
         self.condiciones = condiciones
         self.conclusion  = conclusion
         self.confianza   = confianza
         self.explicacion = explicacion
+        self.cf          = cf if cf is not None else confianza
 
     def evaluar(self, hechos):
         """
@@ -58,8 +60,7 @@ class Rule:
 
     def __repr__(self):
         conds = " Y ".join(f"{k}={v}" for k, v in self.condiciones.items())
-        return f"[{self.nombre}] SI {conds} → {self.conclusion} (confianza: {self.confianza})"
-
+        return f"[{self.nombre}] SI {conds} → {self.conclusion} (CF: {self.cf})"
 
 # ─────────────────────────────────────────────
 # BASE DE CONOCIMIENTO
