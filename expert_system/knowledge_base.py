@@ -300,6 +300,19 @@ class KnowledgeBase:
             Rule("R109", {"tapa": "rosca_plastico", "rigidez": "rigido"},
                  "PLASTICO", 0.88,
                  "Tapa rosca plástica con objeto rígido → plástico PET, nunca vidrio"),
+
+          # Frasco vidrio con contenido visible de color
+            Rule("R110", {"objeto_reconocido": "frasco_vidrio",
+                          "tapa": "tapa_ancha_metalica",
+                          "brillo": "alto_nitido", "rigidez": "rigido"},
+                 "VIDRIO", 0.96,
+                 "Frasco con tapa ancha metálica y brillo nítido → vidrio aunque tenga contenido de color"),
+
+            # Snack metálico rectangular flexible — nunca es lata
+            Rule("R111", {"brillo": "metalico", "forma": "rectangular_plana",
+                          "rigidez": "flexible", "tapa": "sellado"},
+                 "PLASTICO", 0.97,
+                 "Metálico rectangular flexible sellado → envase de snack plástico metalizado, no lata"),
         ]
 
     def obtener_reglas(self):

@@ -275,6 +275,267 @@ CASOS_DE_PRUEBA = [
             "tapa": "sin_tapa", "textura": "rugosa", "rigidez": "indefinido"
         }
     },
+    # ── NUEVOS CASOS — inventario completo campus Manabí ─────────
+
+    # VIDRIO adicional
+    {
+        "id": "T26", "nombre": "Botella jugo Natura vidrio",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_jugo_vidrio", "confianza_ml": "alta",
+            "transparencia": "media", "color": "ambar",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T27", "nombre": "Botella salsa soya vidrio oscuro",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_salsa_vidrio", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "ambar",
+            "forma": "cilindrica_delgada", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T28", "nombre": "Frasco mermelada vidrio con contenido",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "frasco_vidrio", "confianza_ml": "media",
+            "transparencia": "media", "color": "variado_vivo",
+            "forma": "cilindrica_ancha", "brillo": "alto_nitido",
+            "tapa": "tapa_ancha_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T29", "nombre": "Botella Güitig vidrio con gas",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_jugo_vidrio", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "corona_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+
+    # PLÁSTICO adicional
+    {
+        "id": "T30", "nombre": "Botella agua Tesalia grande 2L",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_agua", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_ancha", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T31", "nombre": "Botella Pepsi azul plástico",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_gaseosa", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T32", "nombre": "Botella Fanta naranja plástico",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_gaseosa", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T33", "nombre": "Botella energizante 220V plástico",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_energizante", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T34", "nombre": "Botella energizante Profit plástico",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_energizante", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T35", "nombre": "Botella Currimcho plástico pequeña",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_alcoholica_plastico", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T36", "nombre": "Botella 24-7 plástico",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_alcoholica_plastico", "confianza_ml": "media",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T37", "nombre": "Monster negro plástico opaco",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_energizante", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "negro",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T38", "nombre": "Funda plástica transparente flexible",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "funda_plastico", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "irregular", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "flexible"
+        }
+    },
+
+    # ORGÁNICO adicional
+    {
+        "id": "T39", "nombre": "Cáscara de manzana",
+        "esperado": "ORGANICO", "categoria": "ORGANICO",
+        "atributos": {
+            "objeto_reconocido": "cascara_fruta", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "irregular", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "rugosa", "rigidez": "flexible"
+        }
+    },
+    {
+        "id": "T40", "nombre": "Restos de comida cafetería",
+        "esperado": "ORGANICO", "categoria": "ORGANICO",
+        "atributos": {
+            "objeto_reconocido": "restos_comida", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "marron_tierra",
+            "forma": "irregular", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "rugosa", "rigidez": "flexible"
+        }
+    },
+    {
+        "id": "T41", "nombre": "Cartón de jugo rectangular",
+        "esperado": "ORGANICO", "categoria": "ORGANICO",
+        "atributos": {
+            "objeto_reconocido": "carton", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "rectangular_plana", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "lisa_sin_brillo", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T42", "nombre": "Hoja de papel cuaderno",
+        "esperado": "ORGANICO", "categoria": "ORGANICO",
+        "atributos": {
+            "objeto_reconocido": "papel_servilleta", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "rectangular_plana", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "lisa_sin_brillo", "rigidez": "flexible"
+        }
+    },
+
+    # LATA adicional
+    {
+        "id": "T43", "nombre": "Lata de atún",
+        "esperado": "LATA", "categoria": "LATA",
+        "atributos": {
+            "objeto_reconocido": "lata", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "metalico",
+            "forma": "cilindrica_estandar", "brillo": "metalico",
+            "tapa": "sellado", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+
+    # CASOS DIFÍCILES adicionales
+    {
+        "id": "T44", "nombre": "DIFÍCIL — Sprite verde plástico vs Club verde vidrio",
+        "esperado": "PLASTICO", "categoria": "AMBIGUO",
+        "atributos": {
+            "objeto_reconocido": "botella_gaseosa", "confianza_ml": "media",
+            "transparencia": "media", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T45", "nombre": "DIFÍCIL — Botella alcohólica pequeña confianza media",
+        "esperado": "PLASTICO", "categoria": "AMBIGUO",
+        "atributos": {
+            "objeto_reconocido": "botella_alcoholica_plastico", "confianza_ml": "media",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T46", "nombre": "DIFÍCIL — Snack metálico vs lata",
+        "esperado": "PLASTICO", "categoria": "AMBIGUO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "metalico",
+            "forma": "rectangular_plana", "brillo": "metalico",
+            "tapa": "sellado", "textura": "lisa_brillante", "rigidez": "flexible"
+        }
+    },
+    {
+        "id": "T47", "nombre": "DIFÍCIL — Yogur blanco vs frasco vidrio blanco",
+        "esperado": "PLASTICO", "categoria": "AMBIGUO",
+        "atributos": {
+            "objeto_reconocido": "yogur_plastico", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "cilindrica_ancha", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T48", "nombre": "DIFÍCIL — Botella vidrio transparente sin etiqueta",
+        "esperado": "VIDRIO", "categoria": "AMBIGUO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T49", "nombre": "DIFÍCIL — Cáscara oscura vs funda negra",
+        "esperado": "ORGANICO", "categoria": "AMBIGUO",
+        "atributos": {
+            "objeto_reconocido": "cascara_fruta", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "marron_tierra",
+            "forma": "irregular", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "rugosa", "rigidez": "flexible"
+        }
+    },
+    {
+        "id": "T50", "nombre": "EXTREMO — Atributos incompletos ML falla parcial",
+        "esperado": "PLASTICO", "categoria": "EXTREMO",
+        "atributos": {
+            "objeto_reconocido": "botella_agua", "confianza_ml": "baja",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
 ]
 
 
