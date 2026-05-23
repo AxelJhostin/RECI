@@ -4,6 +4,7 @@
 
 from expert_system.knowledge_base import KnowledgeBase
 from expert_system.working_memory import WorkingMemory
+from expert_system.validator import AttributeValidator
 
 class InferenceEngine:
     def __init__(self):
@@ -13,6 +14,9 @@ class InferenceEngine:
         self.conclusion_final = None
         self.confianza_final = 0.0
         self.distribucion = {}
+        self.validator = AttributeValidator() 
+        self.errores_validacion = []           
+        self.advertencias_validacion = []
 
     def cargar_hechos(self, resultado_ml: dict):
         """
@@ -24,7 +28,22 @@ class InferenceEngine:
         self.conclusion_final = None
         self.confianza_final = 0.0
         self.distribucion = {}
+        self.errores_validacion = []         
+        self.advertencias_validacion = []    
+
+        # Validar antes de cargar
+        es_valido, errores, advertencias = self.validator.validar(resultado_ml)
+        self.errores_validacion = errores
+        self.advertencias_validacion = advertencias
+
+        if not es_valido:
+            # Bloquear inferencia si hay errores críticos
+            self.conclusion_final = "DESCONOCIDO"
+            self.confianza_final = 0.0
+            return False
+
         self.memoria.agregar_hechos_desde_ml(resultado_ml)
+        return True 
 
     def ejecutar(self):
         """
@@ -33,6 +52,9 @@ class InferenceEngine:
         acumula las que se cumplen y elige la conclusión
         con mayor confianza acumulada.
         """
+        if self.errores_validacion:
+            return self.conclusion_final, self.confianza_final, []
+    
         hechos = self.memoria.obtener_todos()
         reglas = self.kb.obtener_reglas()
 
@@ -94,6 +116,12 @@ class InferenceEngine:
         lineas.append("  SISTEMA EXPERTO RECI — EXPLICACIÓN DEL RAZONAMIENTO")
         lineas.append("=" * 60)
 
+        # Mostrar advertencias de validación si existen
+        if self.advertencias_validacion:
+            lineas.append(f"\n  ⚠ ADVERTENCIAS DE VALIDACIÓN:")
+            for a in self.advertencias_validacion:
+                lineas.append(f"    • {a}")
+
         lineas.append(f"\n  HECHOS ANALIZADOS:")
         for atributo, valor in self.memoria.obtener_todos().items():
             lineas.append(f"    • {atributo:25} = {valor}")
@@ -102,7 +130,7 @@ class InferenceEngine:
         if self.reglas_disparadas:
             for regla in self.reglas_disparadas:
                 lineas.append(f"    ✓ [{regla.nombre}] → {regla.conclusion} "
-                              f"(peso: {regla.confianza})")
+                            f"(peso: {regla.confianza})")
                 lineas.append(f"      {regla.explicacion}")
         else:
             lineas.append("    Ninguna regla se disparó.")
