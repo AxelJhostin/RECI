@@ -1,0 +1,18 @@
+# RECI — Sistema Experto de Reciclaje Inteligente
+# Dependencias del proyecto
+# Instalar con: pip3 install -r requirements.txt
+
+# API de visión artificial
+anthropic>=0.104.1
+
+# HTTP client para Gemini API
+httpx>=0.28.1
+
+# Variables de entorno
+python-dotenv>=1.0.0
+
+# Visión por computadora y cámara
+opencv-python>=4.5.0
+
+# Validación de datos
+pydantic>=2.0.0
