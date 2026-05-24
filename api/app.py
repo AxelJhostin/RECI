@@ -73,6 +73,18 @@ stats = RECIStatistics()
 UPLOAD_DIR = Path("images/api_uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+# ─────────────────────────────────────────────
+# DETECCIÓN AUTOMÁTICA DE MODO DE VISIÓN
+# Prioriza Teachable Machine si el modelo existe,
+# cae a Gemini automáticamente si no está disponible.
+# ─────────────────────────────────────────────
+
+def _modelo_tm_disponible() -> bool:
+    return Path("model/model.tflite").exists() and Path("model/labels.txt").exists()
+
+MODO_VISION = "teachable_machine" if _modelo_tm_disponible() else "gemini"
+print(f"[RECI API] Modo de visión: {MODO_VISION.upper()}")
+
 
 # ─────────────────────────────────────────────
 # MODELOS DE DATOS
@@ -99,13 +111,14 @@ class AtributosInput(BaseModel):
 def raiz():
     """Info general de la API."""
     return {
-        "proyecto": "RECI — Tacho Inteligente de Reciclaje",
-        "version":  "1.0.0",
-        "sede":     "PUCE Manabí",
-        "status":   "activo",
+        "proyecto":    "RECI — Tacho Inteligente de Reciclaje",
+        "version":     "1.0.0",
+        "sede":        "PUCE Manabí",
+        "status":      "activo",
+        "modo_vision": MODO_VISION,
         "endpoints": {
             "POST /clasificar/atributos": "Clasificar con atributos manuales",
-            "POST /clasificar/imagen":    "Clasificar desde imagen (Gemini)",
+            "POST /clasificar/imagen":    "Clasificar desde imagen (Gemini o TM)",
             "GET  /estadisticas":         "Estadísticas de la sesión",
             "GET  /historial":            "Últimas clasificaciones",
             "POST /reset":                "Resetear estadísticas",
@@ -125,6 +138,8 @@ def health():
             "status":          "ok",
             "sistema_experto": "activo",
             "total_reglas":    total_reglas,
+            "modo_vision":     MODO_VISION,
+            "modelo_tm":       _modelo_tm_disponible(),
             "timestamp":       datetime.now().isoformat()
         }
     except Exception as e:
@@ -206,8 +221,12 @@ def clasificar_atributos(atributos: AtributosInput):
 async def clasificar_imagen(file: UploadFile = File(...)):
     """
     Clasifica un objeto desde una imagen.
-    Usa Gemini para extraer atributos y luego el sistema experto.
-    En producción este endpoint será reemplazado por MobileNet v2.
+
+    Modo automático:
+    - Si existe model/model.tflite → usa Teachable Machine (producción)
+    - Si no existe               → usa Gemini API (desarrollo/fallback)
+
+    El sistema experto y el JSON de respuesta son idénticos en ambos modos.
     """
     try:
         from vision.attribute_extractor import AttributeExtractor
@@ -220,11 +239,19 @@ async def clasificar_imagen(file: UploadFile = File(...)):
         with open(ruta_temp, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extraer atributos con Gemini
         extractor = AttributeExtractor()
-        atributos = extractor.analizar_imagen(str(ruta_temp))
 
-        # Clasificar con sistema experto
+        # ── Selección automática de modo de visión ───────────────
+        if _modelo_tm_disponible():
+            # Producción: Teachable Machine
+            atributos  = extractor.analizar_imagen_tm(str(ruta_temp))
+            vision_usada = "teachable_machine"
+        else:
+            # Desarrollo: Gemini API
+            atributos  = extractor.analizar_imagen(str(ruta_temp))
+            vision_usada = "gemini"
+        # ────────────────────────────────────────────────────────
+
         engine = InferenceEngine()
         engine.cargar_hechos(atributos)
         conclusion, confianza, reglas = engine.ejecutar()
@@ -261,7 +288,8 @@ async def clasificar_imagen(file: UploadFile = File(...)):
                 "meta_reglas_aplicadas", []),
             "advertencias":          [str(a) for a in engine.advertencias_validacion],
             "payload_supabase":      reporte.payload_supabase(),
-            "imagen_procesada":      file.filename
+            "imagen_procesada":      file.filename,
+            "vision_usada":          vision_usada
         }
 
     except Exception as e:

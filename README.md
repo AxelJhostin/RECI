@@ -351,12 +351,12 @@ Se implementará un endpoint REST para:
 - Extractor de atributos con Gemini API
 - Cámara en tiempo real funcional
 - 85.7% precisión con imágenes reales
+- API REST con FastAPI 
 
 ### 🔄 En progreso
 - Modo automático sin botón (trigger por sensor)
 
 ### ⏳ Pendiente
-- API REST con FastAPI
 - Entrenamiento MobileNet v2 (equipo ML)
 - Integración Raspberry Pi + servo
 - Dashboard Next.js (equipo nube)

@@ -1,7 +1,6 @@
 # vision/attribute_extractor.py
-# Extractor de atributos visuales usando Google Gemini
-# Analiza imágenes y extrae los atributos que necesita el sistema experto
-# Módulo temporal — será reemplazado por MobileNet v2 entrenado
+# Extractor de atributos visuales usando Google Gemini (actual) o Teachable Machine (producción)
+# Módulo de visión del sistema experto RECI
 
 import os
 import json
@@ -15,12 +14,16 @@ class AttributeExtractor:
     Extrae atributos visuales de una imagen usando Google Gemini.
     Convierte una imagen en el diccionario de atributos que
     necesita el motor de inferencia del sistema experto RECI.
+
+    Cuando el equipo ML entregue el modelo Teachable Machine,
+    usar analizar_imagen_tm() en lugar de analizar_imagen().
+    El resto del sistema no cambia.
     """
 
     GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models"
-    "/gemini-2.5-flash:generateContent"
-)   
+        "https://generativelanguage.googleapis.com/v1beta/models"
+        "/gemini-2.5-flash:generateContent"
+    )
 
     PROMPT = """Eres el módulo de visión del sistema experto RECI, un tacho inteligente de reciclaje universitario en Ecuador.
 
@@ -80,11 +83,11 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         ruta = Path(ruta_imagen)
         extension = ruta.suffix.lower()
         mime_types = {
-            ".jpg": "image/jpeg",
+            ".jpg":  "image/jpeg",
             ".jpeg": "image/jpeg",
-            ".png": "image/png",
+            ".png":  "image/png",
             ".webp": "image/webp",
-            ".gif": "image/gif"
+            ".gif":  "image/gif"
         }
         mime_type = mime_types.get(extension, "image/jpeg")
         with open(ruta_imagen, "rb") as f:
@@ -93,14 +96,13 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
 
     def analizar_imagen(self, ruta_imagen: str) -> dict:
         """
-        Analiza una imagen y retorna los atributos del objeto.
+        Analiza una imagen con Gemini y retorna los 9 atributos.
+        Versión actual (prototipo) — funciona sin modelo entrenado.
         """
-        print(f"  🔍 Analizando imagen: {ruta_imagen}")
+        print(f"  🔍 Analizando imagen con Gemini: {ruta_imagen}")
 
-        # Convertir imagen a base64
         imagen_b64, mime_type = self._imagen_a_base64(ruta_imagen)
 
-        # Construir payload para Gemini
         payload = {
             "contents": [{
                 "parts": [
@@ -108,7 +110,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     {
                         "inline_data": {
                             "mime_type": mime_type,
-                            "data": imagen_b64
+                            "data":      imagen_b64
                         }
                     }
                 ]
@@ -120,17 +122,11 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             }
         }
 
-        # Llamar a Gemini API
         url = f"{self.GEMINI_URL}?key={self.api_key}"
-        response = httpx.post(
-            url,
-            json=payload,
-            timeout=60.0
-        )
+        response = httpx.post(url, json=payload, timeout=60.0)
         response.raise_for_status()
         data = response.json()
 
-        # Extraer texto de respuesta
         texto = data["candidates"][0]["content"]["parts"][0]["text"]
         texto = texto.strip()
 
@@ -153,14 +149,30 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         texto = texto.strip()
         print(f"  📝 Respuesta Gemini: {texto}")
 
-        # Parsear JSON
         atributos = json.loads(texto)
         print(f"  ✅ Atributos extraídos: {atributos}")
         return atributos
 
+    def analizar_imagen_tm(self, ruta_imagen: str) -> dict:
+        """
+        Analiza una imagen con Teachable Machine (.tflite) y retorna los 9 atributos.
+        Versión producción — requiere model/model.tflite y model/labels.txt.
+
+        Si el modelo no está disponible, hace fallback automático a Gemini
+        para que el sistema siga funcionando durante el desarrollo.
+        """
+        try:
+            from vision.tm_classifier import TeachableMachineClassifier
+            clf = TeachableMachineClassifier()
+            return clf.analizar_imagen(ruta_imagen)
+        except FileNotFoundError as e:
+            print(f"  ⚠ Modelo TM no disponible, usando Gemini como fallback...")
+            print(f"  ⚠ Detalle: {e}")
+            return self.analizar_imagen(ruta_imagen)
+
     def analizar_y_clasificar(self, ruta_imagen: str) -> dict:
         """
-        Flujo completo: imagen → atributos → sistema experto → decisión.
+        Flujo completo con Gemini: imagen → atributos → sistema experto → decisión.
         """
         import sys
         import os
@@ -169,18 +181,50 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         from expert_system.inference_engine import InferenceEngine
         from expert_system.explanation import ExplanationReport
 
-        # 1. Extraer atributos con Gemini
         atributos = self.analizar_imagen(ruta_imagen)
 
-        # 2. Pasar al sistema experto
         engine = InferenceEngine()
         engine.cargar_hechos(atributos)
         conclusion, confianza, reglas = engine.ejecutar()
 
-        # 3. Generar reporte
         reporte = ExplanationReport(engine)
 
-        # 4. Mostrar resultado
+        print(engine.obtener_explicacion())
+        decision = engine.decision_hardware()
+        print(f"\n  ACCIÓN HARDWARE:")
+        print(f"    Compuerta : {decision['compuerta']}")
+        print(f"    LED       : {decision['led']}")
+        print(f"    Servo     : {decision['angulo_servo']}°")
+        print(f"    Mensaje   : {decision['mensaje']}")
+
+        return {
+            "atributos":  atributos,
+            "conclusion": conclusion,
+            "confianza":  confianza,
+            "hardware":   decision,
+            "reporte":    reporte.a_dict()
+        }
+
+    def analizar_y_clasificar_tm(self, ruta_imagen: str) -> dict:
+        """
+        Flujo completo con Teachable Machine: imagen → atributos → sistema experto → decisión.
+        Reemplaza analizar_y_clasificar() cuando el modelo TM esté listo.
+        """
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+        from expert_system.inference_engine import InferenceEngine
+        from expert_system.explanation import ExplanationReport
+
+        atributos = self.analizar_imagen_tm(ruta_imagen)
+
+        engine = InferenceEngine()
+        engine.cargar_hechos(atributos)
+        conclusion, confianza, reglas = engine.ejecutar()
+
+        reporte = ExplanationReport(engine)
+
         print(engine.obtener_explicacion())
         decision = engine.decision_hardware()
         print(f"\n  ACCIÓN HARDWARE:")
