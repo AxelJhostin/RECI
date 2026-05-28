@@ -1,5 +1,5 @@
 # vision/tm_classifier.py
-# Clasificador con modelo Teachable Machine exportado como TensorFlow Lite
+# Clasificador con modelo entrenado en Google Colab (MobileNetV2) exportado como TFLite
 # Misma interfaz que AttributeExtractor para intercambio transparente
 
 import numpy as np
@@ -9,217 +9,306 @@ from pathlib import Path
 
 class TeachableMachineClassifier:
     """
-    Carga un modelo .tflite exportado desde teachablemachine.withgoogle.com
-    y retorna los 9 atributos que espera InferenceEngine.cargar_hechos().
+    Carga un modelo .tflite y retorna los 9 atributos
+    que espera InferenceEngine.cargar_hechos().
     """
 
-    # ── Mapa clase TM → 9 atributos del sistema experto ──────────────
-    # Los nombres de clase deben coincidir EXACTAMENTE con labels.txt
-    # Si el equipo ML agrega una clase nueva, agregarla aquí también.
     MAPA_CLASES = {
-        # PLÁSTICO
+
+        # ── Clases generales entrenadas en Colab ──────────────────────
+        "plastico": {
+            "objeto_reconocido": "botella_agua",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "vidrio": {
+            "objeto_reconocido": "botella_cerveza_vidrio",
+            "transparencia":     "ninguna",
+            "color":             "ambar",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "alto_nitido",
+            "tapa":              "corona_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "lata": {
+            "objeto_reconocido": "lata",
+            "transparencia":     "ninguna",
+            "color":             "metalico",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "metalico",
+            "tapa":              "sellado",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "organico": {
+            "objeto_reconocido": "cascara_fruta",
+            "transparencia":     "ninguna",
+            "color":             "marron_tierra",
+            "forma":             "irregular",
+            "brillo":            "bajo",
+            "tapa":              "sin_tapa",
+            "textura":           "rugosa",
+            "rigidez":           "flexible",
+        },
+
+        # ── Clases específicas del campus PUCE Manabí ─────────────────
+        "lata_cocacola": {
+            "objeto_reconocido": "lata",
+            "transparencia":     "ninguna",
+            "color":             "metalico",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "metalico",
+            "tapa":              "sellado",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "vidrio_mocaccino": {
+            "objeto_reconocido": "botella_mocachino",
+            "transparencia":     "media",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "alto_nitido",
+            "tapa":              "twist_off_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "plastico_choco_latada": {
+            "objeto_reconocido": "yogur_plastico",
+            "transparencia":     "ninguna",
+            "color":             "blanco_opaco",
+            "forma":             "cilindrica_ancha",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "pomo_agua_puce": {
+            "objeto_reconocido": "botella_agua",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "botella_jugo": {
+            "objeto_reconocido": "botella_jugo_vidrio",
+            "transparencia":     "media",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "alto_nitido",
+            "tapa":              "twist_off_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+
+        # ── Clases específicas por objeto ──────────────────────────────
         "botella_agua": {
             "objeto_reconocido": "botella_agua",
-            "transparencia": "alta",
-            "color": "transparente",
-            "forma": "cilindrica_delgada",
-            "brillo": "medio_difuso",
-            "tapa": "rosca_plastico",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "cilindrica_delgada",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_gaseosa": {
             "objeto_reconocido": "botella_gaseosa",
-            "transparencia": "alta",
-            "color": "transparente",
-            "forma": "cilindrica_estandar",
-            "brillo": "medio_difuso",
-            "tapa": "rosca_plastico",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_energizante": {
             "objeto_reconocido": "botella_energizante",
-            "transparencia": "baja",
-            "color": "variado_vivo",
-            "forma": "cilindrica_delgada",
-            "brillo": "alto_nitido",
-            "tapa": "rosca_plastico",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "baja",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_delgada",
+            "brillo":            "alto_nitido",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_alcoholica_plastico": {
             "objeto_reconocido": "botella_alcoholica_plastico",
-            "transparencia": "alta",
-            "color": "variado_vivo",
-            "forma": "cilindrica_delgada",
-            "brillo": "medio_difuso",
-            "tapa": "rosca_plastico",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "alta",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_delgada",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "vaso_plastico": {
             "objeto_reconocido": "vaso_plastico",
-            "transparencia": "alta",
-            "color": "transparente",
-            "forma": "conica",
-            "brillo": "medio_difuso",
-            "tapa": "sin_tapa",
-            "textura": "lisa_brillante",
-            "rigidez": "flexible",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "conica",
+            "brillo":            "medio_difuso",
+            "tapa":              "sin_tapa",
+            "textura":           "lisa_brillante",
+            "rigidez":           "flexible",
         },
         "vaso_plastico_con_tapa": {
             "objeto_reconocido": "vaso_plastico",
-            "transparencia": "alta",
-            "color": "transparente",
-            "forma": "conica",
-            "brillo": "medio_difuso",
-            "tapa": "domo_plastico",
-            "textura": "lisa_brillante",
-            "rigidez": "flexible",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "conica",
+            "brillo":            "medio_difuso",
+            "tapa":              "domo_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "flexible",
         },
         "yogur_plastico": {
             "objeto_reconocido": "yogur_plastico",
-            "transparencia": "ninguna",
-            "color": "blanco_opaco",
-            "forma": "cilindrica_ancha",
-            "brillo": "medio_difuso",
-            "tapa": "tapa_ancha_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "ninguna",
+            "color":             "blanco_opaco",
+            "forma":             "cilindrica_ancha",
+            "brillo":            "medio_difuso",
+            "tapa":              "tapa_ancha_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "funda_plastico": {
             "objeto_reconocido": "funda_plastico",
-            "transparencia": "alta",
-            "color": "transparente",
-            "forma": "irregular",
-            "brillo": "medio_difuso",
-            "tapa": "sin_tapa",
-            "textura": "lisa_brillante",
-            "rigidez": "flexible",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "irregular",
+            "brillo":            "medio_difuso",
+            "tapa":              "sin_tapa",
+            "textura":           "lisa_brillante",
+            "rigidez":           "flexible",
         },
-        # VIDRIO
         "botella_mocachino": {
             "objeto_reconocido": "botella_mocachino",
-            "transparencia": "ninguna",
-            "color": "ambar",
-            "forma": "cilindrica_estandar",
-            "brillo": "alto_nitido",
-            "tapa": "twist_off_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "ninguna",
+            "color":             "ambar",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "alto_nitido",
+            "tapa":              "twist_off_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_cerveza_vidrio": {
             "objeto_reconocido": "botella_cerveza_vidrio",
-            "transparencia": "baja",
-            "color": "ambar",
-            "forma": "cilindrica_delgada",
-            "brillo": "alto_nitido",
-            "tapa": "corona_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "baja",
+            "color":             "ambar",
+            "forma":             "cilindrica_delgada",
+            "brillo":            "alto_nitido",
+            "tapa":              "corona_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_cerveza_club": {
             "objeto_reconocido": "botella_cerveza_vidrio",
-            "transparencia": "ninguna",
-            "color": "verde_oscuro",
-            "forma": "cilindrica_delgada",
-            "brillo": "alto_nitido",
-            "tapa": "corona_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "ninguna",
+            "color":             "verde_oscuro",
+            "forma":             "cilindrica_delgada",
+            "brillo":            "alto_nitido",
+            "tapa":              "corona_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "frasco_vidrio": {
             "objeto_reconocido": "frasco_vidrio",
-            "transparencia": "alta",
-            "color": "transparente",
-            "forma": "cilindrica_ancha",
-            "brillo": "alto_nitido",
-            "tapa": "tapa_ancha_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "alta",
+            "color":             "transparente",
+            "forma":             "cilindrica_ancha",
+            "brillo":            "alto_nitido",
+            "tapa":              "tapa_ancha_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        },
+        "frasco_vidrio_2": {
+            "objeto_reconocido": "frasco_vidrio",
+            "transparencia":     "media",
+            "color":             "transparente",
+            "forma":             "cilindrica_ancha",
+            "brillo":            "alto_nitido",
+            "tapa":              "tapa_ancha_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_salsa_vidrio": {
             "objeto_reconocido": "botella_salsa_vidrio",
-            "transparencia": "media",
-            "color": "variado_vivo",
-            "forma": "cilindrica_estandar",
-            "brillo": "alto_nitido",
-            "tapa": "twist_off_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "media",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "alto_nitido",
+            "tapa":              "twist_off_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
         "botella_jugo_vidrio": {
             "objeto_reconocido": "botella_jugo_vidrio",
-            "transparencia": "media",
-            "color": "variado_vivo",
-            "forma": "cilindrica_estandar",
-            "brillo": "alto_nitido",
-            "tapa": "twist_off_metalica",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "media",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "alto_nitido",
+            "tapa":              "twist_off_metalica",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
         },
-        # ORGÁNICO
         "cascara_fruta": {
             "objeto_reconocido": "cascara_fruta",
-            "transparencia": "ninguna",
-            "color": "marron_tierra",
-            "forma": "irregular",
-            "brillo": "bajo",
-            "tapa": "sin_tapa",
-            "textura": "rugosa",
-            "rigidez": "flexible",
+            "transparencia":     "ninguna",
+            "color":             "marron_tierra",
+            "forma":             "irregular",
+            "brillo":            "bajo",
+            "tapa":              "sin_tapa",
+            "textura":           "rugosa",
+            "rigidez":           "flexible",
         },
         "restos_comida": {
             "objeto_reconocido": "restos_comida",
-            "transparencia": "ninguna",
-            "color": "marron_tierra",
-            "forma": "irregular",
-            "brillo": "bajo",
-            "tapa": "sin_tapa",
-            "textura": "fibrosa",
-            "rigidez": "indefinido",
+            "transparencia":     "ninguna",
+            "color":             "marron_tierra",
+            "forma":             "irregular",
+            "brillo":            "bajo",
+            "tapa":              "sin_tapa",
+            "textura":           "fibrosa",
+            "rigidez":           "indefinido",
         },
         "papel_servilleta": {
             "objeto_reconocido": "papel_servilleta",
-            "transparencia": "ninguna",
-            "color": "blanco_opaco",
-            "forma": "rectangular_plana",
-            "brillo": "bajo",
-            "tapa": "sin_tapa",
-            "textura": "lisa_sin_brillo",
-            "rigidez": "flexible",
+            "transparencia":     "ninguna",
+            "color":             "blanco_opaco",
+            "forma":             "rectangular_plana",
+            "brillo":            "bajo",
+            "tapa":              "sin_tapa",
+            "textura":           "lisa_sin_brillo",
+            "rigidez":           "flexible",
         },
         "carton": {
             "objeto_reconocido": "carton",
-            "transparencia": "ninguna",
-            "color": "marron_tierra",
-            "forma": "rectangular_plana",
-            "brillo": "bajo",
-            "tapa": "sin_tapa",
-            "textura": "lisa_sin_brillo",
-            "rigidez": "rigido",
+            "transparencia":     "ninguna",
+            "color":             "marron_tierra",
+            "forma":             "rectangular_plana",
+            "brillo":            "bajo",
+            "tapa":              "sin_tapa",
+            "textura":           "lisa_sin_brillo",
+            "rigidez":           "rigido",
         },
         "vaso_carton": {
             "objeto_reconocido": "vaso_carton",
-            "transparencia": "ninguna",
-            "color": "blanco_opaco",
-            "forma": "conica",
-            "brillo": "bajo",
-            "tapa": "sin_tapa",
-            "textura": "lisa_sin_brillo",
-            "rigidez": "rigido",
-        },
-        # LATA
-        "lata": {
-            "objeto_reconocido": "lata",
-            "transparencia": "ninguna",
-            "color": "metalico",
-            "forma": "cilindrica_estandar",
-            "brillo": "metalico",
-            "tapa": "sellado",
-            "textura": "lisa_brillante",
-            "rigidez": "rigido",
+            "transparencia":     "ninguna",
+            "color":             "blanco_opaco",
+            "forma":             "conica",
+            "brillo":            "bajo",
+            "tapa":              "sin_tapa",
+            "textura":           "lisa_sin_brillo",
+            "rigidez":           "rigido",
         },
     }
 
@@ -232,19 +321,17 @@ class TeachableMachineClassifier:
         if not model_path.exists():
             raise FileNotFoundError(
                 f"Modelo no encontrado: {model_path}\n"
-                f"El equipo ML debe exportar el modelo desde Teachable Machine\n"
-                f"y colocar model.tflite en la carpeta model/"
+                f"Colocar model.tflite en la carpeta model/"
             )
         if not labels_path.exists():
             raise FileNotFoundError(f"labels.txt no encontrado: {labels_path}")
 
-        # Cargar etiquetas — formato Teachable Machine: "0 nombre_clase"
+        # Cargar etiquetas
         with open(labels_path, "r", encoding="utf-8") as f:
             self.labels = []
             for line in f:
                 line = line.strip()
                 if line:
-                    # "0 botella_agua" → "botella_agua"
                     partes = line.split(" ", 1)
                     self.labels.append(partes[1] if len(partes) > 1 else partes[0])
 
@@ -252,14 +339,14 @@ class TeachableMachineClassifier:
         try:
             import tflite_runtime.interpreter as tflite
         except ImportError:
-            import tensorflow.lite as tflite  # fallback con TF completo
+            import tensorflow.lite as tflite
 
         self.interpreter = tflite.Interpreter(model_path=str(model_path))
         self.interpreter.allocate_tensors()
         self.input_details  = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
-        shape = self.input_details[0]['shape']  # [1, H, W, 3]
+        shape       = self.input_details[0]['shape']
         self.altura = shape[1]
         self.ancho  = shape[2]
 
@@ -268,7 +355,6 @@ class TeachableMachineClassifier:
         print(f"[TM] Resolución de entrada: {self.altura}×{self.ancho}")
 
     def _nivel_confianza(self, prob: float) -> str:
-        """Convierte probabilidad numérica al valor que espera el sistema experto."""
         if prob >= 0.80:
             return "alta"
         elif prob >= 0.55:
@@ -277,7 +363,6 @@ class TeachableMachineClassifier:
             return "baja"
 
     def _inferir(self, imagen_bgr: np.ndarray) -> tuple:
-        """Ejecuta el modelo y retorna (clase, probabilidad, todas_las_probs)."""
         img = cv2.resize(imagen_bgr, (self.ancho, self.altura))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0
@@ -312,11 +397,9 @@ class TeachableMachineClassifier:
         print(f"  🤖 TM detectó: {clase} ({prob:.1%})")
         print(f"  📊 Top 3: {sorted(todas.items(), key=lambda x: x[1], reverse=True)[:3]}")
 
-        # Buscar en el mapa
         atributos_base = self.MAPA_CLASES.get(clase)
 
         if atributos_base is None:
-            # Clase no mapeada → modo seguro, el SE pedirá segunda captura
             print(f"  ⚠ Clase '{clase}' no tiene mapeo definido → DESCONOCIDO")
             atributos = {
                 "objeto_reconocido": "desconocido",
@@ -339,7 +422,6 @@ class TeachableMachineClassifier:
     def analizar_frame(self, frame_bgr: np.ndarray) -> dict:
         """
         Versión para cámara en tiempo real — recibe frame OpenCV directamente.
-        Para usar desde camera.py en lugar de leer desde disco.
         """
         clase, prob, _ = self._inferir(frame_bgr)
         confianza_nivel = self._nivel_confianza(prob)
@@ -366,7 +448,6 @@ class TeachableMachineClassifier:
     def analizar_y_clasificar(self, ruta_imagen: str) -> dict:
         """
         Flujo completo idéntico a AttributeExtractor.analizar_y_clasificar().
-        Reemplaza Gemini sin cambiar nada más del sistema.
         """
         import sys, os
         sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
