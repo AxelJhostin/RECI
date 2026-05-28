@@ -19,6 +19,28 @@ Plataforma móvil de dos compartimentos (vidrio / plástico) que se desplaza ent
 | Leonela Sornoza | Hardware + Testing |
 | Andrea Campaña | Hardware + Testing |
 
+## Estructura del repo
+
+```
+Reci/
+├── docs/        # Acta de constitución y documentación del proyecto
+├── web/         # Reci App (PWA) + Reci Cloud (Next.js API routes + Supabase) + Dashboard admin
+├── firmware/    # Código ESP32 (motores, servos, sensores, LEDs, audio) — PlatformIO
+└── ia/          # Código Raspberry Pi (visión, MobileNet v2, sistema experto, UART, cloud)
+```
+
+Cada subcarpeta tiene su propio `README.md` con stack y responsables.
+
+## Cómo correr la web en local
+
+```bash
+cd web
+npm install   # solo la primera vez
+npm run dev
+```
+
+Abre [http://localhost:3000](http://localhost:3000).
+
 ## Contexto académico
 
 - Universidad: PUCE Sede Manabí — Ingeniería de Software, 5to semestre
