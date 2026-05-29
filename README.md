@@ -48,4 +48,8 @@ Abre [http://localhost:3000](http://localhost:3000).
 - Duración: 16 semanas
 - Materias integradoras: Análisis y Circuitos Eléctricos, Sistemas Expertos, Gestión de Proyectos, Tecnologías de Plataforma
 
-Ver [`docs/ACTA.md`](docs/ACTA.md) para el acta de constitución completa.
+## Documentación
+
+- [`docs/PLAN.md`](docs/PLAN.md) — **plan maestro vivo**: estado actual, decisiones técnicas, roadmap de las 8 fases y backlog por subsistema. **Leer primero.**
+- [`docs/ACTA.md`](docs/ACTA.md) — acta de constitución (alcance, criterios de aceptación, riesgos, BOM).
+- [`docs/Acta-de-constitucion.pdf`](docs/Acta-de-constitucion.pdf) — versión PDF original firmada.
