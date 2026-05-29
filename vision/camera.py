@@ -1,7 +1,7 @@
 # vision/camera.py
 # Módulo de captura de imagen en tiempo real
 # Modo demo: ESPACIO activa cuenta regresiva → captura → clasifica
-# Flujo: TM primero → si confianza < 80% → Gemini confirma
+# Flujo: TM primero → si confianza < 95% → Gemini confirma
 # En producción: sensor ultrasónico reemplaza el ESPACIO
 
 import cv2
@@ -48,8 +48,8 @@ class Camera:
         ESPACIO → cuenta regresiva → captura → análisis → resultado
 
         Flujo de análisis:
-        - TM >= 80% confianza → resultado inmediato sin llamar Gemini
-        - TM <  80% confianza → Gemini confirma
+        - TM >= 95% confianza → resultado inmediato sin llamar Gemini
+        - TM <  95% confianza → Gemini confirma (maneja objetos no permitidos)
         - Sin modelo TM       → Gemini directamente
 
         En producción: sensor ultrasónico reemplaza el ESPACIO.
@@ -64,7 +64,7 @@ class Camera:
         print("  3. Espera el resultado")
         print("  ─────────────────────────────────────────")
         if tm_classifier:
-            print("  🤖 TM activo — respuesta rápida cuando confianza >= 80%")
+            print("  🤖 TM activo — respuesta rápida cuando confianza >= 95%")
         else:
             print("  🔮 Modo Gemini — sin modelo TM disponible")
         print("  Q → Salir\n")
@@ -233,18 +233,18 @@ class Camera:
         colores = {
             "VIDRIO":      (255, 150,   0),
             "PLASTICO":    (  0, 220,   0),
-            "ORGANICO":    (  0, 220, 220),
-            "LATA":        (  0,  80, 255),
-            "DESCONOCIDO": (150, 150, 150)
+            "ORGANICO":    (  0,   0, 255),
+            "LATA":        (  0,   0, 255),
+            "DESCONOCIDO": (  0,   0, 255)
         }
-        color = colores.get(conclusion, (150, 150, 150))
+        color = colores.get(conclusion, (0, 0, 255))
 
         # Categoría — texto grande centrado
         tam = cv2.getTextSize(conclusion,
                               cv2.FONT_HERSHEY_SIMPLEX, 3.5, 8)[0]
         x   = (w - tam[0]) // 2
         cv2.putText(frame, conclusion,
-                   (x, h//2 - 60),
+                   (x, h//2 - 80),
                    cv2.FONT_HERSHEY_SIMPLEX, 3.5,
                    color, 8)
 
@@ -254,7 +254,7 @@ class Camera:
                                cv2.FONT_HERSHEY_SIMPLEX, 1.1, 2)[0]
         x2   = (w - tam2[0]) // 2
         cv2.putText(frame, texto_conf,
-                   (x2, h//2 + 20),
+                   (x2, h//2),
                    cv2.FONT_HERSHEY_SIMPLEX, 1.1,
                    (255, 255, 255), 2)
 
@@ -265,17 +265,28 @@ class Camera:
                                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
             x3   = (w - tam3[0]) // 2
             cv2.putText(frame, texto_comp,
-                       (x3, h//2 + 75),
+                       (x3, h//2 + 55),
                        cv2.FONT_HERSHEY_SIMPLEX, 1.0,
                        color, 2)
         else:
-            tam4 = cv2.getTextSize(mensaje,
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)[0]
+            # Mensaje de no permitido — texto destacado en rojo
+            texto_np = "⚠ OBJETO NO PERMITIDO EN ESTE TACHO"
+            tam4 = cv2.getTextSize(texto_np,
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
             x4   = (w - tam4[0]) // 2
+            cv2.putText(frame, texto_np,
+                       (x4, h//2 + 55),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                       (0, 0, 255), 2)
+
+            # Segundo mensaje más pequeño
+            tam5 = cv2.getTextSize(mensaje,
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.65, 1)[0]
+            x5   = (w - tam5[0]) // 2
             cv2.putText(frame, mensaje,
-                       (x4, h//2 + 75),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.75,
-                       (0, 100, 255), 2)
+                       (x5, h//2 + 95),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.65,
+                       (180, 180, 180), 1)
 
         # Barra de confianza
         barra_w = int((w - 200) * confianza)
@@ -291,8 +302,8 @@ class Camera:
         Analiza una imagen con el sistema experto.
 
         Flujo híbrido TM + Gemini:
-        - TM >= 80% confianza → resultado inmediato, no llama Gemini
-        - TM <  80% confianza → Gemini confirma
+        - TM >= 95% confianza → resultado inmediato, no llama Gemini
+        - TM <  95% confianza → Gemini confirma (identifica objetos no permitidos)
         - Sin modelo TM       → Gemini directamente
 
         El tm_classifier se pasa ya cargado — no se recarga en cada llamada.
@@ -307,14 +318,15 @@ class Camera:
 
                 print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%})")
 
-                if prob_tm >= 0.80:
-                    # Alta confianza — TM solo, sin Gemini, modelo ya cargado
-                    print(f"  ✅ Confianza alta — usando TM directamente")
+                if prob_tm >= 0.95:
+                    # Muy alta confianza — TM solo, sin Gemini
+                    print(f"  ✅ Confianza muy alta — usando TM directamente")
                     resultado = extractor.analizar_y_clasificar_tm(
                         ruta, clf=tm_classifier)
                 else:
-                    # Baja confianza — Gemini confirma
-                    print(f"  ⚠ Confianza baja ({prob_tm:.1%}) — confirmando con Gemini...")
+                    # Confianza menor al 95% — Gemini confirma
+                    # Esto cubre objetos no permitidos (latas, cartón, manos, etc.)
+                    print(f"  ⚠ Confianza {prob_tm:.1%} < 95% — confirmando con Gemini...")
                     resultado = extractor.analizar_y_clasificar(ruta)
             else:
                 # Sin TM — Gemini directamente
@@ -375,7 +387,7 @@ if __name__ == "__main__":
     tm_classifier = None
     try:
         tm_classifier = TeachableMachineClassifier()
-        print("  🤖 Modo: TM + Gemini (TM principal, Gemini confirma si duda)")
+        print("  🤖 Modo: TM + Gemini (TM >= 95% directo, resto confirma Gemini)")
     except FileNotFoundError:
         print("  🔮 Modo: Solo Gemini (modelo TM no disponible)")
 

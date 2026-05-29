@@ -254,20 +254,17 @@ class InferenceEngine:
         return "\n".join(lineas)
 
     def decision_hardware(self):
-        """
-        Traduce la conclusión a instrucción física para el Raspberry Pi.
-        """
         acciones = {
             "VIDRIO":      {"compuerta": "izquierda", "led": "azul",
-                           "angulo_servo": 45,  "mensaje": "VIDRIO detectado — abriendo compartimento izquierdo"},
+                        "angulo_servo": 45,  "mensaje": "VIDRIO detectado — abriendo compartimento izquierdo"},
             "PLASTICO":    {"compuerta": "derecha",   "led": "verde",
-                           "angulo_servo": 135, "mensaje": "PLÁSTICO detectado — abriendo compartimento derecho"},
+                        "angulo_servo": 135, "mensaje": "PLÁSTICO detectado — abriendo compartimento derecho"},
             "ORGANICO":    {"compuerta": "ninguna",   "led": "rojo",
-                           "angulo_servo": 0,   "mensaje": "⚠ Orgánico o papel — este objeto no pertenece a este tacho"},
+                        "angulo_servo": 0,   "mensaje": "Solo se acepta plástico y vidrio"},
             "LATA":        {"compuerta": "ninguna",   "led": "rojo",
-                           "angulo_servo": 0,   "mensaje": "⚠ Lata detectada — este objeto no pertenece a este tacho"},
+                        "angulo_servo": 0,   "mensaje": "Solo se acepta plástico y vidrio"},
             "DESCONOCIDO": {"compuerta": "ninguna",   "led": "rojo",
-                           "angulo_servo": 0,   "mensaje": "⚠ Objeto no reconocido — por favor intente de nuevo"},
+                        "angulo_servo": 0,   "mensaje": "Solo se acepta plástico y vidrio"},
         }
         return acciones.get(self.conclusion_final, acciones["DESCONOCIDO"])
 
