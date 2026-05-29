@@ -1,6 +1,7 @@
 # vision/camera.py
 # Módulo de captura de imagen en tiempo real
 # Modo demo: ESPACIO activa cuenta regresiva → captura → clasifica
+# Flujo: TM primero → si confianza < 80% → Gemini confirma
 # En producción: sensor ultrasónico reemplaza el ESPACIO
 
 import cv2
@@ -41,10 +42,16 @@ class Camera:
         print(f"  📸 Foto guardada: {ruta}")
         return str(ruta)
 
-    def modo_demo(self, extractor=None, cuenta_regresiva=3):
+    def modo_demo(self, extractor=None, tm_classifier=None, cuenta_regresiva=1):
         """
         Modo demo para presentaciones y pruebas.
         ESPACIO → cuenta regresiva → captura → análisis → resultado
+
+        Flujo de análisis:
+        - TM >= 80% confianza → resultado inmediato sin llamar Gemini
+        - TM <  80% confianza → Gemini confirma
+        - Sin modelo TM       → Gemini directamente
+
         En producción: sensor ultrasónico reemplaza el ESPACIO.
         """
         if not self.cap or not self.cap.isOpened():
@@ -56,10 +63,14 @@ class Camera:
         print("  2. Presiona ESPACIO para clasificar")
         print("  3. Espera el resultado")
         print("  ─────────────────────────────────────────")
+        if tm_classifier:
+            print("  🤖 TM activo — respuesta rápida cuando confianza >= 80%")
+        else:
+            print("  🔮 Modo Gemini — sin modelo TM disponible")
         print("  Q → Salir\n")
 
-        PREVIEW   = "preview"
-        COUNTDOWN = "countdown"
+        PREVIEW    = "preview"
+        COUNTDOWN  = "countdown"
         ANALIZANDO = "analizando"
         RESULTADO  = "resultado"
 
@@ -72,8 +83,8 @@ class Camera:
                             "Analizando imagen.  ",
                             "Analizando imagen.. ",
                             "Analizando imagen..."]
-        progreso_idx     = 0
-        tiempo_progreso  = time.time()
+        progreso_idx    = 0
+        tiempo_progreso = time.time()
 
         while True:
             ret, frame = self.cap.read()
@@ -105,7 +116,6 @@ class Camera:
                 self._barra_inferior(frame, h, w)
 
                 if cuenta_actual > 0:
-                    # Número grande centrado
                     cv2.putText(frame, str(cuenta_actual),
                                (w//2 - 45, h//2 + 50),
                                cv2.FONT_HERSHEY_SIMPLEX, 6,
@@ -116,35 +126,31 @@ class Camera:
                                cv2.FONT_HERSHEY_SIMPLEX, 0.85,
                                (255, 255, 0), 2)
                 else:
-                    # Capturar sin flash
                     frame_capturado = frame.copy()
                     ruta = self.capturar_foto()
                     estado = ANALIZANDO
-                    progreso_idx   = 0
+                    progreso_idx    = 0
                     tiempo_progreso = ahora
 
-                    # Analizar en segundo plano
                     if extractor:
                         print("\n  🔍 Analizando objeto...")
-                        ultimo_resultado = self._analizar(extractor, ruta)
+                        ultimo_resultado = self._analizar(
+                            extractor, ruta, tm_classifier=tm_classifier)
 
-                    estado         = RESULTADO
+                    estado          = RESULTADO
                     tiempo_resultado = time.time()
 
             # ── ANALIZANDO ────────────────────────────────────────
             elif estado == ANALIZANDO:
-                # Mostrar frame congelado con indicador de progreso
                 if frame_capturado is not None:
                     frame = frame_capturado.copy()
 
-                # Overlay oscuro
                 overlay = frame.copy()
                 cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
                 cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
 
-                # Texto animado de progreso
                 if ahora - tiempo_progreso > 0.4:
-                    progreso_idx   = (progreso_idx + 1) % 4
+                    progreso_idx    = (progreso_idx + 1) % 4
                     tiempo_progreso = ahora
 
                 cv2.putText(frame,
@@ -153,7 +159,6 @@ class Camera:
                            cv2.FONT_HERSHEY_SIMPLEX, 1.2,
                            (0, 255, 255), 3)
 
-                # Barra de progreso animada
                 barra_total = w - 200
                 barra_fill  = int((ahora % 2) / 2 * barra_total)
                 cv2.rectangle(frame, (100, h//2 + 40),
@@ -165,13 +170,11 @@ class Camera:
 
             # ── RESULTADO ─────────────────────────────────────────
             elif estado == RESULTADO:
-                # Mostrar frame congelado de fondo
                 if frame_capturado is not None:
                     frame = frame_capturado.copy()
 
                 self._dibujar_resultado(frame, h, w, ultimo_resultado)
 
-                # Countdown para volver a preview
                 restante = max(0, 5.0 - (ahora - tiempo_resultado))
                 cv2.putText(frame,
                            f"Siguiente en {restante:.0f}s  |  ESPACIO: nuevo",
@@ -196,7 +199,6 @@ class Camera:
                     tiempo_countdown = time.time()
                     print("\n  ⏳ Iniciando cuenta regresiva...")
                 elif estado == RESULTADO:
-                    # Permitir nueva captura antes de los 5 segundos
                     estado           = COUNTDOWN
                     tiempo_countdown = time.time()
                     print("\n  ⏳ Iniciando cuenta regresiva...")
@@ -212,7 +214,6 @@ class Camera:
     def _dibujar_resultado(self, frame, h, w, resultado):
         """Dibuja el resultado grande y claro sobre el frame."""
 
-        # Overlay oscuro
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
@@ -285,10 +286,40 @@ class Camera:
                      (100 + barra_w, h - 25),
                      color, -1)
 
-    def _analizar(self, extractor, ruta):
-        """Analiza una imagen con el sistema experto."""
+    def _analizar(self, extractor, ruta, tm_classifier=None):
+        """
+        Analiza una imagen con el sistema experto.
+
+        Flujo híbrido TM + Gemini:
+        - TM >= 80% confianza → resultado inmediato, no llama Gemini
+        - TM <  80% confianza → Gemini confirma
+        - Sin modelo TM       → Gemini directamente
+
+        El tm_classifier se pasa ya cargado — no se recarga en cada llamada.
+        """
         try:
-            resultado = extractor.analizar_y_clasificar(ruta)
+            resultado = None
+
+            if tm_classifier:
+                # Paso 1: TM clasifica rápido usando el modelo ya cargado
+                img = cv2.imread(ruta)
+                atributos_tm, clase_tm, prob_tm = tm_classifier.analizar_frame(img)
+
+                print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%})")
+
+                if prob_tm >= 0.80:
+                    # Alta confianza — TM solo, sin Gemini, modelo ya cargado
+                    print(f"  ✅ Confianza alta — usando TM directamente")
+                    resultado = extractor.analizar_y_clasificar_tm(
+                        ruta, clf=tm_classifier)
+                else:
+                    # Baja confianza — Gemini confirma
+                    print(f"  ⚠ Confianza baja ({prob_tm:.1%}) — confirmando con Gemini...")
+                    resultado = extractor.analizar_y_clasificar(ruta)
+            else:
+                # Sin TM — Gemini directamente
+                resultado = extractor.analizar_y_clasificar(ruta)
+
             print(f"\n  {'═'*50}")
             print(f"  RESULTADO: {resultado['conclusion']}")
             print(f"  CONFIANZA: {resultado['confianza']*100:.1f}%")
@@ -296,21 +327,25 @@ class Camera:
             print(f"  MENSAJE  : {resultado['hardware']['mensaje']}")
             print(f"  {'═'*50}\n")
             return resultado
+
         except Exception as e:
             if "429" in str(e):
-                print("  ⚠ Rate limit — espera unos segundos e intenta de nuevo")
+                print("  ⚠ Rate limit Gemini — espera unos segundos e intenta de nuevo")
             else:
                 print(f"  ❌ Error al analizar: {e}")
             return None
 
-    def capturar_y_clasificar(self, extractor, delay=2):
-        """Para integración con Raspberry Pi y sensor ultrasónico."""
+    def capturar_y_clasificar(self, extractor, tm_classifier=None, delay=2):
+        """
+        Para integración con Raspberry Pi y sensor ultrasónico.
+        Usa el mismo flujo híbrido TM + Gemini.
+        """
         if not self.cap or not self.cap.isOpened():
             self.iniciar()
         print(f"  ⏳ Capturando en {delay} segundos...")
         time.sleep(delay)
         ruta = self.capturar_foto()
-        return self._analizar(extractor, ruta)
+        return self._analizar(extractor, ruta, tm_classifier=tm_classifier)
 
     def detener(self):
         """Libera la cámara."""
@@ -327,16 +362,31 @@ if __name__ == "__main__":
     import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from vision.attribute_extractor import AttributeExtractor
+    from vision.tm_classifier import TeachableMachineClassifier
 
     print("\n" + "█"*50)
     print("  RECI — SISTEMA DE RECICLAJE INTELIGENTE")
     print("█"*50)
 
+    # Gemini siempre disponible como respaldo
     extractor = AttributeExtractor()
-    camara    = Camera()
+
+    # TM se carga UNA SOLA VEZ al arrancar
+    tm_classifier = None
+    try:
+        tm_classifier = TeachableMachineClassifier()
+        print("  🤖 Modo: TM + Gemini (TM principal, Gemini confirma si duda)")
+    except FileNotFoundError:
+        print("  🔮 Modo: Solo Gemini (modelo TM no disponible)")
+
+    camara = Camera()
 
     try:
-        camara.modo_demo(extractor=extractor, cuenta_regresiva=3)
+        camara.modo_demo(
+            extractor=extractor,
+            tm_classifier=tm_classifier,
+            cuenta_regresiva=1
+        )
     except KeyboardInterrupt:
         print("\n  Interrumpido por el usuario")
     finally:

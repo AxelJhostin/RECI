@@ -153,17 +153,20 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         print(f"  ✅ Atributos extraídos: {atributos}")
         return atributos
 
-    def analizar_imagen_tm(self, ruta_imagen: str) -> dict:
+    def analizar_imagen_tm(self, ruta_imagen: str, clf=None) -> dict:
         """
         Analiza una imagen con Teachable Machine (.tflite) y retorna los 9 atributos.
         Versión producción — requiere model/model.tflite y model/labels.txt.
 
-        Si el modelo no está disponible, hace fallback automático a Gemini
-        para que el sistema siga funcionando durante el desarrollo.
+        clf: instancia de TeachableMachineClassifier ya cargada (opcional).
+             Si se pasa, evita recargar el modelo en cada llamada.
+
+        Si el modelo no está disponible, hace fallback automático a Gemini.
         """
         try:
-            from vision.tm_classifier import TeachableMachineClassifier
-            clf = TeachableMachineClassifier()
+            if clf is None:
+                from vision.tm_classifier import TeachableMachineClassifier
+                clf = TeachableMachineClassifier()
             return clf.analizar_imagen(ruta_imagen)
         except FileNotFoundError as e:
             print(f"  ⚠ Modelo TM no disponible, usando Gemini como fallback...")
@@ -205,10 +208,12 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             "reporte":    reporte.a_dict()
         }
 
-    def analizar_y_clasificar_tm(self, ruta_imagen: str) -> dict:
+    def analizar_y_clasificar_tm(self, ruta_imagen: str, clf=None) -> dict:
         """
         Flujo completo con Teachable Machine: imagen → atributos → sistema experto → decisión.
-        Reemplaza analizar_y_clasificar() cuando el modelo TM esté listo.
+
+        clf: instancia de TeachableMachineClassifier ya cargada (opcional).
+             Si se pasa, el modelo no se recarga en cada clasificación — mucho más rápido.
         """
         import sys
         import os
@@ -217,7 +222,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         from expert_system.inference_engine import InferenceEngine
         from expert_system.explanation import ExplanationReport
 
-        atributos = self.analizar_imagen_tm(ruta_imagen)
+        atributos = self.analizar_imagen_tm(ruta_imagen, clf=clf)
 
         engine = InferenceEngine()
         engine.cargar_hechos(atributos)
