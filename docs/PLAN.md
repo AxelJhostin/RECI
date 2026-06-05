@@ -1,7 +1,7 @@
 # Reci — Plan maestro
 
 > Documento vivo. Se actualiza cada vez que cerramos una fase o cambiamos una decisión.
-> Última actualización: 2026-05-28 · semana 0 (pre-arranque oficial).
+> Última actualización: 2026-06-02 · semana 1.
 
 Este documento responde a tres preguntas en orden:
 
@@ -22,21 +22,25 @@ Si buscas el alcance, los criterios de aceptación o los riesgos, eso vive en [`
 - ✅ Estructura del repo: `web/`, `firmware/`, `ia/`, `docs/`.
 - ✅ `web/` scaffolded con **Next.js 16.2 + React 19 + Tailwind 4 + TypeScript** (App Router, Turbopack, `src/` layout). Build y lint limpios.
 - ✅ Landing en español (`/`) con el branding Reci y las funcionalidades destacadas.
-- ✅ `firmware/` y `ia/` reservadas con README de stack y responsables.
+- ✅ Proyecto Supabase creado + schema v1 aplicado (12 tablas, triggers de puntos/racha, RLS).
+- ✅ Cliente Supabase tipado (`web/src/lib/supabase/`), middleware de sesión, Auth magic link.
+- ✅ Página `/login` y ruta `/app` protegida funcionando.
+- ✅ 8 API routes implementadas (recycle, robot position, calls, coupons, compartments, face, vision/classify).
+- ✅ Hardware final definido: Arduino Mega 2560 + ESP32-CAM (ver decisiones técnicas).
 
 ### En curso
 
-Nada por ahora — terminamos la semana 0 con la base lista.
+- **Fase 5 completada** — backend y nube listos para integrarse con el hardware.
+- Pendiente: pantallas de la app (Fase 6) y modelo de visión (Fase 3).
 
 ### Bloqueado / pendiente de decidir
 
 | Tema | Quién decide | Cuándo |
 | --- | --- | --- |
 | Proveedor de mapas (Leaflet+OSM gratis vs Mapbox token) | Paula | Antes de Fase 6 |
-| Protocolo robot↔cloud (Supabase Realtime vs MQTT con HiveMQ) | Paula + Axel | Antes de Fase 5 |
 | Dataset propio: cómo etiquetamos y dónde lo guardamos | Axel | Antes de Fase 3 |
-| Puntos fijos del campus (coordenadas y nombres) | Paula con Decanato | Antes de Fase 2 |
-| Proveedor de hardware final (Mercado Libre EC / local) | Leonela + Andrea | Semana 1 |
+| Puntos fijos del campus (coordenadas y nombres GPS) | Paula con Decanato | Antes de Fase 6 |
+| Framework ML para inferencia en Vercel: TF.js vs ONNX Runtime | Axel + Paula | Antes de Fase 3 |
 
 ---
 
@@ -52,6 +56,11 @@ Las decisiones del acta dejaban algunos "A o B" abiertos. Esto es lo que cerramo
 | Versión de Next | **Next 16.2** (lo que instaló `create-next-app` hoy) | Tiene Turbopack estable y React 19. La doc local en `node_modules/next/dist/docs/` es la fuente autoritativa porque trae breaking changes vs Next 15. |
 | Idioma de la UI | Español (Ecuador) | Es para el campus PUCE Manabí. Solo el código y los commits van en inglés. |
 | Hosting | **Vercel** para el front + Supabase Cloud para DB | Deploy automático desde main. Free tier alcanza para el piloto. |
+| **Cerebro del robot** | **Arduino Mega 2560** (era ESP32) | Más pines y memoria. Controla motores (2×L298N), servos (2×SG5010), sensores HC-SR04 y OLED. |
+| **Sistema de visión** | **ESP32-CAM + OV2640** (era Raspberry Pi 4) | Sin Raspberry Pi. La ESP32-CAM captura imagen y la envía al cloud via WiFi. La IA corre en el servidor, no en el robot. |
+| **Inferencia IA** | **Cloud (Next.js API route `/api/vision/classify`)** (era TF Lite local) | La ESP32-CAM no tiene capacidad de inferencia local. El modelo entrena en Colab y se despliega en Vercel. |
+| **Comunicación interna** | **UART Serial entre ESP32-CAM y Arduino Mega** (era UART Raspberry↔ESP32) | Protocolo `CMD:<accion>:<param>\n`. La ESP32-CAM recibe la decisión del cloud y la reenvía al Arduino. |
+| **Energía** | **Power Bank 10,000 mAh** (lógica) + **LiPo** (motores) + **LM2596** (regulador) | Separación de circuitos para evitar interferencias y proteger la electrónica. |
 
 ---
 
@@ -76,32 +85,34 @@ Las 8 fases del acta, traducidas a entregables concretos y quién los hace. Las 
 
 **Objetivo:** un chasis que se mueve entre dos puntos sin compuertas ni IA.
 
-- [ ] **Leonela** · ensamble chasis + ruedas + driver L298N + motores DC
-- [ ] **Leonela** · firmware ESP32 base con `forward / backward / stop`
+- [ ] **Leonela** · ensamble chasis + ruedas + 2×L298N + 4 motorreductores TT
+- [ ] **Leonela** · firmware Arduino Mega base: `forward / backward / stop / turn`
 - [ ] **Leonela** · sensores HC-SR04 con parada automática a ≤ 20 cm
-- [ ] **Andrea** · batería LiPo + reguladores + cableado
+- [ ] **Leonela** · pantalla OLED 0.96" I2C mostrando estado del robot
+- [ ] **Andrea** · Power Bank (lógica) + LiPo (motores) + LM2596 (regulador) + cableado
 - [ ] **Andrea** · prueba de movimiento punto-a-punto sobre cinta marcada
 
 ### Fase 3 — Sistema IA y experto · semanas 4–6
 
-**Objetivo:** clasificación vidrio/plástico ≥ 85% en condiciones del campus.
+**Objetivo:** clasificación vidrio/plástico ≥ 85% en condiciones del campus, corriendo en el cloud.
 
-- [ ] **Axel** · captura del dataset propio (≥ 500 imgs por clase) en el campus
-- [ ] **Axel** · transfer learning de MobileNet v2 (Google Colab o Raspberry directo)
-- [ ] **Axel** · conversión a TF Lite y prueba en Raspberry Pi 4
-- [ ] **Axel** · base de reglas IF-THEN con umbral de confianza y memoria de sesión
-- [ ] **Axel** · CLI de prueba que clasifica una imagen y devuelve `{material, confianza, decision}`
+- [ ] **Axel** · captura del dataset propio (≥ 500 imgs por clase) en el campus con ESP32-CAM
+- [ ] **Axel** · transfer learning de MobileNet v2 en Google Colab
+- [ ] **Axel** · exportar modelo a formato compatible con Vercel (TF.js SavedModel o ONNX)
+- [ ] **Axel** · integrar el modelo real en `web/src/app/api/vision/classify/route.ts` (reemplazar el stub)
+- [ ] **Axel** · sistema experto: reglas IF-THEN sobre la salida del modelo (umbral confianza, historial)
+- [ ] **Axel + Paula** · prueba end-to-end: ESP32-CAM → `POST /api/vision/classify` → respuesta JSON
 
 ### Fase 4 — Integración Reci físico · semanas 6–8
 
-**Objetivo:** el robot completo funciona standalone (sin nube).
+**Objetivo:** el robot completo funciona con el cloud (ESP32-CAM → cloud → Arduino Mega).
 
-- [ ] **Axel + Leonela** · protocolo UART Raspberry↔ESP32 (comando + payload + checksum)
-- [ ] **Leonela** · servos MG996R abren la compuerta correcta según comando UART
-- [ ] **Andrea** · OLED SSD1306 con animaciones de personalidad (cara feliz / triste / pensando)
-- [ ] **Andrea** · WS2812B direccionales + DFPlayer con set de sonidos
-- [ ] **Axel** · reconocimiento facial opt-in funcionando local (sin nube todavía)
-- [ ] **Equipo** · demo: deposito botella → clasifica → abre compuerta correcta → emoji feliz + sonido
+- [ ] **Axel + Leonela** · protocolo UART: ESP32-CAM (TX) → Arduino Mega (Serial1 RX), formato `CMD:<accion>:<param>\n`
+- [ ] **Leonela** · Arduino Mega parsea comandos UART y activa el servo correcto (SG5010)
+- [ ] **Leonela** · Arduino Mega actualiza OLED con mensajes de estado recibidos por UART
+- [ ] **Andrea** · ESP32-CAM conecta al WiFi del campus, captura imagen y llama a `/api/vision/classify`
+- [ ] **Andrea** · ESP32-CAM llama a `/api/robot/position` y `/api/compartments/update` periódicamente
+- [ ] **Equipo** · demo: deposita botella → ESP32-CAM captura → cloud clasifica → Arduino abre compuerta correcta → OLED muestra resultado
 
 ### Fase 5 — Backend y nube · semanas 7–10
 
@@ -133,7 +144,7 @@ Las 8 fases del acta, traducidas a entregables concretos y quién los hace. Las 
 
 **Objetivo:** los 3 flujos (A, B, C del acta) funcionan sin intervención manual.
 
-- [ ] **Axel** · cliente Reci Cloud desde la Raspberry Pi (POST eventos, GET comandos)
+- [ ] **Axel** · cliente Reci Cloud desde la ESP32-CAM en C++ (POST eventos, position, compartments)
 - [ ] **Paula** · webhook o canal Realtime que despacha el comando "ven al punto X" hacia el robot
 - [ ] **Equipo** · prueba completa de Flujo A (reciclaje estándar)
 - [ ] **Equipo** · prueba completa de Flujo B (llamada desde la app)
@@ -187,18 +198,24 @@ Endpoints REST mínimos (Next.js Route Handlers en `web/src/app/api/`):
 
 ### Firmware · Leonela + Andrea
 
-- ESP32 con PlatformIO. Lenguaje C++.
-- Modos: `manual` (testing) y `commanded` (recibe órdenes UART desde Raspberry).
-- Comandos básicos: `MOVE <forward|backward|left|right> <ms>`, `STOP`, `OPEN <vidrio|plastico>`, `LED <patrón>`, `SOUND <id>`.
-- Hardware abstrahido en libs: `Motors.h`, `Servos.h`, `Ultrasonic.h`, `Leds.h`, `Audio.h`.
+**Arduino Mega 2560** (C++ Arduino):
+- Modos: `manual` (testing serie) y `commanded` (recibe órdenes por UART desde ESP32-CAM).
+- Comandos UART: `CMD:OPEN:vidrio`, `CMD:OPEN:plastico`, `CMD:MOVE:forward`, `CMD:STOP`, `CMD:OLED:<texto>`.
+- Hardware abstrahido en libs: `Motors.h` (2×L298N), `Servos.h` (2×SG5010), `Ultrasonic.h` (HC-SR04), `Display.h` (OLED I2C).
+
+**ESP32-CAM** (C++ Arduino):
+- Captura imagen con OV2640.
+- Llama a `POST /api/vision/classify` vía WiFi y parsea la respuesta JSON.
+- Reenvía el resultado al Arduino Mega por Serial UART.
+- Llama periódicamente a `/api/robot/position` y `/api/compartments/update`.
 
 ### IA · Axel
 
-- Python 3.11 en Raspberry Pi 4 (64-bit OS).
-- Pipeline: captura cámara → preprocess → MobileNet v2 (TF Lite) → reglas experto → decisión.
-- Cliente UART hacia ESP32.
-- Cliente HTTPS hacia Reci Cloud (Supabase REST + Realtime).
-- Modo offline: si no hay red, encolar eventos en SQLite local y reintentar al reconectar.
+- Modelo MobileNet v2 entrenado en Google Colab con dataset propio (campus PUCE Manabí).
+- Exportado a TF.js SavedModel o ONNX para correr en Vercel (serverless).
+- Integrado en `web/src/app/api/vision/classify/route.ts` (actualmente tiene un stub).
+- Sistema experto sobre la salida del modelo: umbrales de confianza, historial de sesión.
+- Sin procesamiento local en el robot — toda la inferencia ocurre en el cloud.
 
 ---
 
