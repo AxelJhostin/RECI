@@ -192,6 +192,41 @@ class MetaRuleEngine:
             })
         ))
 
+        # ── MR11: Producto opaco colorido con brillo bajo → sesgar a plástico ──
+        # Cubre Fioravanti, Pulp, Tampico y jugos ecuatorianos en plástico oscuro
+        self.meta_reglas.append(MetaRule(
+            nombre="MR11",
+            prioridad=8,
+            descripcion="Producto opaco de color vivo con brillo bajo casi siempre es plástico en el campus",
+            condicion=lambda hechos, ctx: (
+                hechos.get("color") == "variado_vivo" and
+                hechos.get("brillo") == "bajo" and
+                hechos.get("transparencia") == "ninguna"
+            ),
+            accion=lambda hechos, ctx: ctx.update({
+                "sesgo_plastico": ctx.get("sesgo_plastico", 0) + 0.07,
+                "nota": "MR11: Producto opaco colorido con brillo bajo — sesgo hacia plástico (Fioravanti/jugos)"
+            })
+        ))
+
+        # ── MR12: Rectangular rígido opaco → excluir vidrio y lata, potenciar orgánico ──
+        # Cubre Tetra Pak (Del Valle, Sunny, Natura) y cajas de cartón
+        self.meta_reglas.append(MetaRule(
+            nombre="MR12",
+            prioridad=9,
+            descripcion="Forma rectangular rígida opaca excluye vidrio y lata — es Tetra Pak o cartón",
+            condicion=lambda hechos, ctx: (
+                hechos.get("forma") == "rectangular_plana" and
+                hechos.get("rigidez") == "rigido" and
+                hechos.get("transparencia") == "ninguna"
+            ),
+            accion=lambda hechos, ctx: ctx.update({
+                "excluir_categorias": ctx.get("excluir_categorias", []) + ["VIDRIO", "LATA"],
+                "sesgo_organico": ctx.get("sesgo_organico", 0) + 0.08,
+                "nota": "MR12: Rectangular rígido opaco — VIDRIO y LATA excluidos, sesgo a orgánico (Tetra Pak)"
+            })
+        ))
+
         # Ordenar por prioridad descendente
         self.meta_reglas.sort(key=lambda mr: mr.prioridad, reverse=True)
 

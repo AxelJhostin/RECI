@@ -159,4 +159,120 @@ CASOS_CAMPUS = [
             "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
         }
     },
+
+    # ── Productos nuevos campus: Gatorade, Cola Gallito ──────────────
+
+    {
+        "id": "TC16", "nombre": "Gatorade deportivo plástico boca ancha",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "alta",
+            "transparencia": "media", "color": "variado_vivo",
+            "forma": "cilindrica_ancha", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC17", "nombre": "Gatorade confianza media — debe ser plástico",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "media",
+            "transparencia": "media", "color": "variado_vivo",
+            "forma": "cilindrica_ancha", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC18", "nombre": "Cola Gallito gaseosa ecuatoriana plástico",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_cola_gallito", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC19", "nombre": "Cola Gallito confianza media — debe ser plástico",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_cola_gallito", "confianza_ml": "media",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC20", "nombre": "DIFÍCIL campus — Cola Gallito solo por atributos visuales",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "alta", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+
+    # ── Nuevos productos manabitas agregados (Fioravanti, Pony Malta, Tetra Pak) ──
+
+    {
+        "id": "TC21", "nombre": "Fioravanti gaseosa ecuatoriana plástico oscuro",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_fioravanti", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "bajo",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC22", "nombre": "DIFÍCIL campus — Fioravanti solo por atributos visuales",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "bajo",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC23", "nombre": "Pony Malta vidrio ámbar campus",
+        "esperado": "VIDRIO", "categoria": "CAMPUS_VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_pony_malta", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "ambar",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC24", "nombre": "DIFÍCIL campus — Pony Malta solo por atributos visuales",
+        "esperado": "VIDRIO", "categoria": "CAMPUS_VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "ambar",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC25", "nombre": "Tetra Pak Del Valle jugo — orgánico/cartón",
+        "esperado": "ORGANICO", "categoria": "CAMPUS_ORGANICO",
+        "atributos": {
+            "objeto_reconocido": "tetra_pak", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "rectangular_plana", "brillo": "bajo",
+            "tapa": "sellado", "textura": "lisa_sin_brillo", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC26", "nombre": "DIFÍCIL campus — Tetra Pak solo por atributos visuales",
+        "esperado": "ORGANICO", "categoria": "CAMPUS_ORGANICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "rectangular_plana", "brillo": "bajo",
+            "tapa": "sellado", "textura": "lisa_sin_brillo", "rigidez": "rigido"
+        }
+    },
 ]

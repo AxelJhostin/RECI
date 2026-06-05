@@ -31,7 +31,17 @@ Tu tarea es analizar la imagen y extraer exactamente estos atributos visuales de
 
 ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 
-- objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | desconocido
+- objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | botella_fioravanti | botella_aceite_plastico | botella_jugo_plastico | tetra_pak | botella_pony_malta | botella_enjuague_bucal | botella_cola_gallito | botella_gatorade | desconocido
+
+  Guía rápida de los nuevos valores:
+  - botella_fioravanti: gaseosa ecuatoriana, botella PET oscura naranja/marrón con etiqueta de gallo
+  - botella_aceite_plastico: botella de aceite de cocina (Alesol, El Cocinero), plástico semitransparente amarillento, forma ancha
+  - botella_jugo_plastico: jugo en plástico (Pulp, Tampico, Frugos), etiqueta colorida, opaca
+  - tetra_pak: caja de cartón para jugo/leche (Del Valle, Sunny, Natura), rectangular, NO es vidrio ni plástico
+  - botella_pony_malta: malta ecuatoriana en vidrio ámbar, similar a cerveza pero con tapa twist-off
+  - botella_enjuague_bucal: Colgate Plax, Listerine u otro enjuague en plástico
+  - botella_cola_gallito: gaseosa ecuatoriana Cola Gallito, PET transparente con etiqueta colorida tipo Coca-Cola
+  - botella_gatorade: bebida deportiva Gatorade, PET con boca más ancha que gaseosa estándar
 
 - confianza_ml: alta | media | baja
 

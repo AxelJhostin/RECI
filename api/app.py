@@ -66,6 +66,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Motor de inferencia compartido — se crea una vez al iniciar la API
+# cargar_hechos() limpia el estado interno antes de cada clasificación,
+# por lo que es seguro reutilizarlo (RECI procesa un objeto a la vez)
+engine_global = InferenceEngine()
+
 # Estadísticas globales de la sesión
 stats = RECIStatistics()
 
@@ -132,12 +137,10 @@ def raiz():
 def health():
     """Verifica que el sistema experto esté funcionando."""
     try:
-        engine = InferenceEngine()
-        total_reglas = len(engine.kb.obtener_reglas())
         return {
             "status":          "ok",
             "sistema_experto": "activo",
-            "total_reglas":    total_reglas,
+            "total_reglas":    len(engine_global.kb.obtener_reglas()),
             "modo_vision":     MODO_VISION,
             "modelo_tm":       _modelo_tm_disponible(),
             "timestamp":       datetime.now().isoformat()
@@ -149,8 +152,7 @@ def health():
 @app.get("/reglas", tags=["Info"])
 def obtener_reglas():
     """Retorna información sobre las reglas cargadas."""
-    engine = InferenceEngine()
-    reglas = engine.kb.obtener_reglas()
+    reglas = engine_global.kb.obtener_reglas()
 
     por_conclusion = {}
     for r in reglas:
@@ -175,11 +177,10 @@ def clasificar_atributos(atributos: AtributosInput):
     """
     try:
         datos  = atributos.model_dump()
-        engine = InferenceEngine()
-        engine.cargar_hechos(datos)
-        conclusion, confianza, reglas = engine.ejecutar()
-        reporte  = ExplanationReport(engine)
-        hardware = engine.decision_hardware()
+        engine_global.cargar_hechos(datos)
+        conclusion, confianza, reglas = engine_global.ejecutar()
+        reporte  = ExplanationReport(engine_global)
+        hardware = engine_global.decision_hardware()
 
         stats.registrar(
             conclusion        = conclusion,
@@ -189,11 +190,11 @@ def clasificar_atributos(atributos: AtributosInput):
         )
 
         backward = None
-        if engine.resultado_backward:
+        if engine_global.resultado_backward:
             backward = {
-                "conclusion":  engine.resultado_backward,
-                "score":       engine.score_backward,
-                "consistente": engine.resultado_backward == conclusion
+                "conclusion":  engine_global.resultado_backward,
+                "score":       engine_global.score_backward,
+                "consistente": engine_global.resultado_backward == conclusion
             }
 
         return {
@@ -207,9 +208,9 @@ def clasificar_atributos(atributos: AtributosInput):
             "atributos":             datos,
             "reglas_disparadas":     len(reglas),
             "backward_chaining":     backward,
-            "meta_reglas_aplicadas": engine.contexto_meta.get(
+            "meta_reglas_aplicadas": engine_global.contexto_meta.get(
                 "meta_reglas_aplicadas", []),
-            "advertencias":          [str(a) for a in engine.advertencias_validacion],
+            "advertencias":          [str(a) for a in engine_global.advertencias_validacion],
             "payload_supabase":      reporte.payload_supabase()
         }
 
@@ -252,11 +253,10 @@ async def clasificar_imagen(file: UploadFile = File(...)):
             vision_usada = "gemini"
         # ────────────────────────────────────────────────────────
 
-        engine = InferenceEngine()
-        engine.cargar_hechos(atributos)
-        conclusion, confianza, reglas = engine.ejecutar()
-        reporte  = ExplanationReport(engine)
-        hardware = engine.decision_hardware()
+        engine_global.cargar_hechos(atributos)
+        conclusion, confianza, reglas = engine_global.ejecutar()
+        reporte  = ExplanationReport(engine_global)
+        hardware = engine_global.decision_hardware()
 
         stats.registrar(
             conclusion        = conclusion,
@@ -266,11 +266,11 @@ async def clasificar_imagen(file: UploadFile = File(...)):
         )
 
         backward = None
-        if engine.resultado_backward:
+        if engine_global.resultado_backward:
             backward = {
-                "conclusion":  engine.resultado_backward,
-                "score":       engine.score_backward,
-                "consistente": engine.resultado_backward == conclusion
+                "conclusion":  engine_global.resultado_backward,
+                "score":       engine_global.score_backward,
+                "consistente": engine_global.resultado_backward == conclusion
             }
 
         return {
@@ -284,9 +284,9 @@ async def clasificar_imagen(file: UploadFile = File(...)):
             "atributos":             atributos,
             "reglas_disparadas":     len(reglas),
             "backward_chaining":     backward,
-            "meta_reglas_aplicadas": engine.contexto_meta.get(
+            "meta_reglas_aplicadas": engine_global.contexto_meta.get(
                 "meta_reglas_aplicadas", []),
-            "advertencias":          [str(a) for a in engine.advertencias_validacion],
+            "advertencias":          [str(a) for a in engine_global.advertencias_validacion],
             "payload_supabase":      reporte.payload_supabase(),
             "imagen_procesada":      file.filename,
             "vision_usada":          vision_usada

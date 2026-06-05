@@ -24,6 +24,10 @@ ATRIBUTOS = {
                              "botella_cerveza_vidrio", "botella_salsa_vidrio",
                              "frasco_vidrio", "botella_jugo_vidrio", "cascara_fruta",
                              "restos_comida", "papel_servilleta", "carton", "lata",
+                             "botella_fioravanti", "botella_aceite_plastico",
+                             "botella_jugo_plastico", "tetra_pak",
+                             "botella_pony_malta", "botella_enjuague_bucal",
+                             "botella_cola_gallito", "botella_gatorade",
                              "desconocido"]
 }
 
@@ -112,6 +116,26 @@ class KnowledgeBase:
             Rule("R17", {"objeto_reconocido": "vaso_carton",           "confianza_ml": "alta"}, "ORGANICO",  0.94, "Vaso de cartón de cafetería identificado"),
 
             Rule("R18", {"objeto_reconocido": "lata",                  "confianza_ml": "alta"}, "LATA",      1.00, "Lata de aluminio identificada — no pertenece a ningún compartimento"),
+
+            # Productos ecuatorianos/manabitas agregados
+            Rule("R19_A", {"objeto_reconocido": "botella_fioravanti",      "confianza_ml": "alta"}, "PLASTICO",  0.97, "Fioravanti identificada — gaseosa ecuatoriana en botella PET oscura"),
+            Rule("R19_B", {"objeto_reconocido": "botella_aceite_plastico", "confianza_ml": "alta"}, "PLASTICO",  0.97, "Aceite de cocina (Alesol/El Cocinero) identificado — plástico semitransparente"),
+            Rule("R19_C", {"objeto_reconocido": "botella_jugo_plastico",   "confianza_ml": "alta"}, "PLASTICO",  0.96, "Jugo en plástico (Pulp/Tampico/Frugos) identificado — PET con etiqueta colorida"),
+            Rule("R19_D", {"objeto_reconocido": "tetra_pak",               "confianza_ml": "alta"}, "ORGANICO",  0.98, "Tetra Pak (Del Valle/Sunny/Natura) identificado — cartón compuesto, no reciclable aquí"),
+            Rule("R19_E", {"objeto_reconocido": "botella_pony_malta",      "confianza_ml": "alta"}, "VIDRIO",    0.97, "Pony Malta identificada — malta ecuatoriana en botella de vidrio ámbar"),
+            Rule("R19_F", {"objeto_reconocido": "botella_enjuague_bucal",  "confianza_ml": "alta"}, "PLASTICO",  0.97, "Enjuague bucal (Colgate Plax/Listerine) identificado — plástico"),
+
+            # Confianza media para los mismos objetos
+            Rule("R19_G", {"objeto_reconocido": "botella_fioravanti",      "confianza_ml": "media"}, "PLASTICO", 0.90, "Probable Fioravanti con confianza media — plástico oscuro ecuatoriano"),
+            Rule("R19_H", {"objeto_reconocido": "botella_pony_malta",      "confianza_ml": "media"}, "VIDRIO",   0.87, "Probable Pony Malta con confianza media — vidrio ámbar similar a cerveza"),
+            Rule("R19_I", {"objeto_reconocido": "tetra_pak",               "confianza_ml": "media"}, "ORGANICO", 0.90, "Probable Tetra Pak con confianza media — cartón compuesto"),
+            Rule("R19_J", {"objeto_reconocido": "botella_jugo_plastico",   "confianza_ml": "media"}, "PLASTICO", 0.88, "Probable jugo plástico con confianza media — PET colorido"),
+
+            # Cola Gallito y Gatorade
+            Rule("R19_K", {"objeto_reconocido": "botella_cola_gallito", "confianza_ml": "alta"},  "PLASTICO", 0.98, "Cola Gallito identificada — gaseosa ecuatoriana en plástico, similar a Coca-Cola"),
+            Rule("R19_L", {"objeto_reconocido": "botella_cola_gallito", "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable Cola Gallito con confianza media — gaseosa ecuatoriana"),
+            Rule("R19_M", {"objeto_reconocido": "botella_gatorade",     "confianza_ml": "alta"},  "PLASTICO", 0.98, "Gatorade identificado — bebida deportiva en plástico boca ancha"),
+            Rule("R19_N", {"objeto_reconocido": "botella_gatorade",     "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable Gatorade con confianza media — bebida deportiva plástico"),
         ]
 
         # ── NIVEL 2: Razonamiento por atributos visuales ─────────────────
@@ -332,6 +356,176 @@ class KnowledgeBase:
                           "textura": "lisa_sin_brillo", "rigidez": "rigido"},
                  "ORGANICO", 0.95,
                  "Vaso de cartón con textura sin brillo → orgánico/papel sin importar forma"),
+
+            # ── Productos ecuatorianos/manabitas — identificación visual ──────
+
+            # Fioravanti — gaseosa ecuatoriana, botella oscura naranja/marrón
+            Rule("R113", {"color": "variado_vivo", "transparencia": "baja",
+                          "tapa": "rosca_plastico", "brillo": "bajo"},
+                 "PLASTICO", 0.92,
+                 "Color vivo con baja transparencia, tapa rosca y brillo bajo → Fioravanti u otro jugo oscuro plástico"),
+
+            Rule("R114", {"color": "variado_vivo", "transparencia": "ninguna",
+                          "forma": "cilindrica_estandar", "tapa": "rosca_plastico",
+                          "brillo": "bajo"},
+                 "PLASTICO", 0.93,
+                 "Opaco colorido con tapa rosca y brillo bajo → Fioravanti, Pulp o bebida plástica ecuatoriana"),
+
+            # Pony Malta — vidrio ámbar, forma similar a cerveza pero tapa twist-off
+            Rule("R115", {"color": "ambar", "brillo": "alto_nitido",
+                          "forma": "cilindrica_estandar", "tapa": "twist_off_metalica"},
+                 "VIDRIO", 0.95,
+                 "Ámbar brillante con tapa twist-off → Pony Malta o cerveza artesanal en vidrio"),
+
+            Rule("R116", {"color": "ambar", "brillo": "alto_nitido",
+                          "rigidez": "rigido", "forma": "cilindrica_estandar",
+                          "transparencia": "ninguna"},
+                 "VIDRIO", 0.88,
+                 "Ámbar opaco rígido cilíndrico brillante → cerveza o malta en vidrio (Pilsener, Pony Malta)"),
+
+            # Aceite de cocina en plástico — semitransparente amarillento, ancho
+            Rule("R117", {"transparencia": "media", "color": "ambar",
+                          "forma": "cilindrica_ancha", "tapa": "rosca_plastico"},
+                 "PLASTICO", 0.91,
+                 "Semitransparente amarillento ancho con rosca plástica → aceite de cocina en plástico (Alesol)"),
+
+            # Aceite de cocina en vidrio — menos común pero existe
+            Rule("R118", {"transparencia": "media", "color": "ambar",
+                          "forma": "cilindrica_estandar", "tapa": "tapa_ancha_metalica",
+                          "brillo": "alto_nitido"},
+                 "VIDRIO", 0.90,
+                 "Ámbar semitransparente con tapa ancha metálica y brillo nítido → aceite de cocina en vidrio"),
+
+            # Tetra Pak — rectangular, liso, rígido y colorido (Del Valle, Sunny, Natura)
+            Rule("R119", {"forma": "rectangular_plana", "textura": "lisa_sin_brillo",
+                          "rigidez": "rigido", "color": "variado_vivo",
+                          "transparencia": "ninguna"},
+                 "ORGANICO", 0.96,
+                 "Rectangular liso colorido rígido → Tetra Pak de jugo (Del Valle/Sunny), es cartón compuesto"),
+
+            Rule("R120", {"objeto_reconocido": "tetra_pak", "rigidez": "rigido",
+                          "forma": "rectangular_plana"},
+                 "ORGANICO", 0.97,
+                 "Tetra Pak rectangular rígido reconocido → cartón compuesto, no reciclable en RECI"),
+
+            # Pulp / Tampico / Frugos — jugo plástico, botella opaca colorida
+            Rule("R121", {"color": "variado_vivo", "forma": "cilindrica_estandar",
+                          "tapa": "rosca_plastico", "transparencia": "ninguna",
+                          "brillo": "bajo"},
+                 "PLASTICO", 0.91,
+                 "Botella opaca colorida estándar con tapa rosca → jugo plástico tipo Pulp/Tampico/Frugos"),
+
+            # Enjuague bucal (Colgate Plax, Listerine) — delgado, blanco o colorido
+            Rule("R122", {"color": "blanco_opaco", "forma": "cilindrica_delgada",
+                          "tapa": "rosca_plastico", "brillo": "medio_difuso"},
+                 "PLASTICO", 0.93,
+                 "Blanco opaco delgado con tapa rosca → enjuague bucal plástico, no yogur"),
+
+            Rule("R123", {"color": "variado_vivo", "forma": "cilindrica_delgada",
+                          "tapa": "rosca_plastico", "brillo": "medio_difuso",
+                          "rigidez": "rigido"},
+                 "PLASTICO", 0.92,
+                 "Delgado colorido rígido con tapa rosca → enjuague bucal con color (Listerine) en plástico"),
+
+            # Zhumir / aguardiente ecuatoriano — blanco opaco, cilíndrico, tapa rosca
+            Rule("R124", {"color": "blanco_opaco", "forma": "cilindrica_estandar",
+                          "tapa": "rosca_plastico", "transparencia": "ninguna",
+                          "brillo": "bajo"},
+                 "PLASTICO", 0.90,
+                 "Blanco opaco estándar con tapa rosca y brillo bajo → Zhumir u aguardiente en plástico"),
+
+            # Güitig en vidrio — agua mineral ecuatoriana, verde transparente brillante
+            Rule("R125", {"transparencia": "alta", "color": "verde_oscuro",
+                          "brillo": "alto_nitido", "tapa": "twist_off_metalica"},
+                 "VIDRIO", 0.95,
+                 "Verde transparente brillante con tapa twist-off → Güitig agua mineral en vidrio"),
+
+            # Salsa de soya / condimento oscuro — delgado, ámbar, casi opaco
+            Rule("R126", {"color": "ambar", "transparencia": "baja",
+                          "brillo": "alto_nitido", "tapa": "twist_off_metalica",
+                          "forma": "cilindrica_delgada"},
+                 "VIDRIO", 0.93,
+                 "Delgado ámbar semiopaco brillante con twist-off → salsa de soya o condimento oscuro en vidrio"),
+
+            # Ketchup / salsa flexible — plástico suave cónico con tapa rosca
+            Rule("R127", {"color": "variado_vivo", "forma": "conica",
+                          "rigidez": "flexible", "tapa": "rosca_plastico"},
+                 "PLASTICO", 0.93,
+                 "Cónico flexible colorido con tapa rosca → botella de ketchup o salsa en plástico blando"),
+
+            # Agua Dasani / BonAgua / Cristal — PET estándar transparente con tapa rosca
+            Rule("R128", {"transparencia": "alta", "color": "transparente",
+                          "tapa": "rosca_plastico", "brillo": "medio_difuso",
+                          "rigidez": "rigido"},
+                 "PLASTICO", 0.96,
+                 "Transparente con tapa rosca y brillo difuso → agua purificada PET (Dasani, BonAgua, Cristal)"),
+
+            # Energizante con etiqueta metálica — no confundir con lata
+            Rule("R129", {"brillo": "metalico", "forma": "cilindrica_delgada",
+                          "rigidez": "flexible"},
+                 "PLASTICO", 0.91,
+                 "Metálico delgado pero flexible → energizante con etiqueta metálica, no lata de aluminio"),
+
+            # Fioravanti vs vidrio oscuro — la tapa rosca lo resuelve
+            Rule("R130", {"color": "variado_vivo", "brillo": "bajo",
+                          "tapa": "corona_metalica"},
+                 "VIDRIO", 0.89,
+                 "Color vivo con tapa corona metálica → posible cerveza artesanal o refresco en vidrio"),
+
+            # Aceite de cocina grande en plástico con confianza media
+            Rule("R131", {"objeto_reconocido": "botella_aceite_plastico",
+                          "forma": "cilindrica_ancha", "confianza_ml": "media"},
+                 "PLASTICO", 0.91,
+                 "Botella de aceite ancha con confianza media → plástico semitransparente grande"),
+
+            # Del Valle / Sunny pequeño — Tetra Pak reconocido sin brillo
+            Rule("R132", {"objeto_reconocido": "tetra_pak", "textura": "lisa_sin_brillo",
+                          "transparencia": "ninguna"},
+                 "ORGANICO", 0.96,
+                 "Tetra Pak reconocido con textura sin brillo → cartón compuesto, va a orgánico"),
+
+            # ── Cola Gallito — gaseosa ecuatoriana ───────────────────────────
+            # Visualmente igual a Coca-Cola/Pepsi: PET transparente con etiqueta colorida
+            Rule("R133", {"color": "variado_vivo", "forma": "cilindrica_estandar",
+                          "tapa": "rosca_plastico", "brillo": "medio_difuso",
+                          "transparencia": "alta", "rigidez": "rigido"},
+                 "PLASTICO", 0.94,
+                 "Botella transparente colorida estándar con tapa rosca → Cola Gallito, Pepsi, Coca-Cola u otra gaseosa PET"),
+
+            Rule("R134", {"objeto_reconocido": "botella_cola_gallito",
+                          "tapa": "rosca_plastico", "rigidez": "rigido"},
+                 "PLASTICO", 0.97,
+                 "Cola Gallito con tapa rosca rígida → plástico PET ecuatoriano"),
+
+            # ── Gatorade — bebida deportiva, boca ancha ──────────────────────
+            # Botella más ancha que las gaseosas estándar, tapa rosca deportiva
+            Rule("R135", {"color": "variado_vivo", "forma": "cilindrica_ancha",
+                          "tapa": "rosca_plastico", "brillo": "medio_difuso",
+                          "transparencia": "media", "rigidez": "rigido"},
+                 "PLASTICO", 0.95,
+                 "Ancho colorido semitransparente con tapa rosca → Gatorade o bebida deportiva plástica"),
+
+            Rule("R136", {"objeto_reconocido": "botella_gatorade",
+                          "forma": "cilindrica_ancha", "tapa": "rosca_plastico"},
+                 "PLASTICO", 0.97,
+                 "Gatorade boca ancha con tapa rosca → plástico PET deportivo"),
+
+            # ── 220V — energizante ecuatoriano amarillo/verde ────────────────
+            # Delgado, muy colorido, etiqueta amarilla/verde intensa
+            Rule("R137", {"objeto_reconocido": "botella_energizante",
+                          "forma": "cilindrica_delgada", "color": "variado_vivo",
+                          "tapa": "rosca_plastico", "confianza_ml": "alta"},
+                 "PLASTICO", 0.98,
+                 "Energizante delgado colorido con tapa rosca y alta confianza → 220V, Volt, Profit o similar"),
+
+            # ── Powerade — botella deportiva estándar ───────────────────────
+            # Similar a gaseosa pero puede ser transparente con color de líquido
+            Rule("R138", {"objeto_reconocido": "botella_gaseosa",
+                          "transparencia": "alta", "color": "transparente",
+                          "tapa": "rosca_plastico", "forma": "cilindrica_estandar",
+                          "brillo": "medio_difuso"},
+                 "PLASTICO", 0.96,
+                 "Gaseosa transparente estándar con tapa rosca → Powerade clear, agua saborizada o similar"),
         ]
 
     def obtener_reglas(self):

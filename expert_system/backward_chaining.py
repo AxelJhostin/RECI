@@ -85,8 +85,8 @@ class BackwardChainingEngine:
                     descripcion="El vidrio tiene superficie lisa y brillante"
                 ),
                 CondicionRequisito(
-                    "color", ["ambar", "verde_oscuro", "transparente"], peso=0.75,
-                    descripcion="Colores típicos del vidrio: ámbar, verde oscuro o transparente"
+                    "color", ["ambar", "verde_oscuro", "transparente", "variado_vivo"], peso=0.75,
+                    descripcion="Colores típicos del vidrio: ámbar, verde oscuro, transparente o colorido (Mocachino, salsas en vidrio)"
                 ),
                 CondicionRequisito(
                     "transparencia", ["alta", "media", "ninguna"], peso=0.50,
@@ -119,8 +119,8 @@ class BackwardChainingEngine:
                 ),
                 CondicionRequisito(
                     "color", ["transparente", "variado_vivo", "blanco_opaco",
-                              "negro"], peso=0.70,
-                    descripcion="Colores típicos del plástico: transparente, vivos o negro"
+                              "negro", "ambar"], peso=0.70,
+                    descripcion="Colores típicos del plástico: transparente, vivos, negro o ámbar (aceite de cocina)"
                 ),
                 CondicionRequisito(
                     "rigidez", ["rigido", "flexible"], peso=0.60,
@@ -128,8 +128,8 @@ class BackwardChainingEngine:
                 ),
                 CondicionRequisito(
                     "forma", ["cilindrica_delgada", "cilindrica_estandar",
-                              "conica", "irregular"], peso=0.65,
-                    descripcion="El plástico viene en muchas formas"
+                              "cilindrica_ancha", "conica", "irregular"], peso=0.65,
+                    descripcion="El plástico viene en muchas formas, incluyendo ancha (Gatorade, yogur, aceite)"
                 ),
             ]
         )
@@ -144,16 +144,16 @@ class BackwardChainingEngine:
                     descripcion="Los residuos orgánicos y papel tienen forma irregular o plana"
                 ),
                 CondicionRequisito(
-                    "textura", ["rugosa", "fibrosa"], peso=0.90,
-                    descripcion="Lo orgánico y el papel tienen textura rugosa o fibrosa"
+                    "textura", ["rugosa", "fibrosa", "lisa_sin_brillo"], peso=0.90,
+                    descripcion="Lo orgánico y papel tienen textura rugosa, fibrosa o lisa sin brillo (Tetra Pak, cartón laminado)"
                 ),
                 CondicionRequisito(
                     "brillo", ["bajo"], peso=0.85,
                     descripcion="Los residuos orgánicos y papel tienen poco o ningún brillo"
                 ),
                 CondicionRequisito(
-                    "rigidez", ["flexible", "indefinido"], peso=0.75,
-                    descripcion="Los residuos orgánicos son flexibles o amorfos"
+                    "rigidez", ["flexible", "indefinido", "rigido"], peso=0.75,
+                    descripcion="Los residuos orgánicos son flexibles o amorfos; el Tetra Pak y cartón son rígidos"
                 ),
                 CondicionRequisito(
                     "color", ["marron_tierra", "variado_vivo", "blanco_opaco"], peso=0.65,
