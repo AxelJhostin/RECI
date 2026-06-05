@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { SignOutButton } from './sign-out-button'
 import type { Metadata } from 'next'
 
@@ -28,7 +29,15 @@ export default async function AppPage() {
           </h1>
           <p className="text-sm text-zinc-500">Bienvenido a Reci</p>
         </div>
-        <SignOutButton />
+        <div className="flex items-center gap-4">
+          <Link
+            href="/app/ajustes"
+            className="text-sm text-zinc-400 transition-colors hover:text-zinc-700"
+          >
+            Ajustes
+          </Link>
+          <SignOutButton />
+        </div>
       </div>
 
       <div className="rounded-2xl bg-emerald-500 p-6 text-white">
@@ -39,19 +48,20 @@ export default async function AppPage() {
 
       <div className="grid grid-cols-2 gap-3">
         {[
-          { icon: '🗺️', label: 'Mapa', desc: 'Encuentra a Reci' },
-          { icon: '📞', label: 'Llamar', desc: 'Llama a Reci aquí' },
-          { icon: '📋', label: 'Historial', desc: 'Tus reciclajes' },
-          { icon: '🎟️', label: 'Cupones', desc: 'Canjea puntos' },
-        ].map(({ icon, label, desc }) => (
-          <div
+          { href: '/app/mapa', icon: '🗺️', label: 'Mapa', desc: 'Encuentra a Reci' },
+          { href: '/app/llamar', icon: '📞', label: 'Llamar', desc: 'Llama a Reci aquí' },
+          { href: '/app/historial', icon: '📋', label: 'Historial', desc: 'Tus reciclajes' },
+          { href: '/app/cupones', icon: '🎟️', label: 'Cupones', desc: 'Canjea puntos' },
+        ].map(({ href, icon, label, desc }) => (
+          <Link
             key={label}
-            className="rounded-xl border border-zinc-200 bg-white p-4 flex flex-col gap-1 cursor-pointer hover:border-emerald-300 transition-colors"
+            href={href}
+            className="rounded-xl border border-zinc-200 bg-white p-4 flex flex-col gap-1 hover:border-emerald-300 transition-colors"
           >
             <span className="text-2xl">{icon}</span>
             <p className="font-semibold text-zinc-900 text-sm">{label}</p>
             <p className="text-xs text-zinc-400">{desc}</p>
-          </div>
+          </Link>
         ))}
       </div>
     </main>
