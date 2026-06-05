@@ -24,3 +24,19 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Marcadores Leaflet con emoji: sin la caja blanca por defecto del divIcon. */
+.reci-marker {
+  background: transparent;
+  border: none;
+}
+.reci-pin {
+  display: block;
+  text-align: center;
+  font-size: 26px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+}
+.reci-pin--robot {
+  font-size: 34px;
+}
