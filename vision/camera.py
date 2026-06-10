@@ -52,6 +52,10 @@ class Camera:
         - TM <  95% confianza → Gemini confirma (maneja objetos no permitidos)
         - Sin modelo TM       → Gemini directamente
 
+        Corrección manual en pantalla de resultado:
+        - P → corregir a PLÁSTICO
+        - V → corregir a VIDRIO
+
         En producción: sensor ultrasónico reemplaza el ESPACIO.
         """
         if not self.cap or not self.cap.isOpened():
@@ -67,7 +71,7 @@ class Camera:
             print("  🤖 TM activo — respuesta rápida cuando confianza >= 95%")
         else:
             print("  🔮 Modo Gemini — sin modelo TM disponible")
-        print("  Q → Salir\n")
+        print("  P/V: Corregir resultado  |  Q: Salir\n")
 
         PREVIEW    = "preview"
         COUNTDOWN  = "countdown"
@@ -103,9 +107,9 @@ class Camera:
                            cv2.FONT_HERSHEY_SIMPLEX, 0.85,
                            (255, 255, 255), 2)
                 cv2.putText(frame,
-                           "ESPACIO: Clasificar  |  Q: Salir",
+                           "ESPACIO: Clasificar  |  P/V: Corregir  |  Q: Salir",
                            (10, h - 18),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                            (180, 180, 180), 1)
 
             # ── COUNTDOWN ────────────────────────────────────────
@@ -177,9 +181,9 @@ class Camera:
 
                 restante = max(0, 5.0 - (ahora - tiempo_resultado))
                 cv2.putText(frame,
-                           f"Siguiente en {restante:.0f}s  |  ESPACIO: nuevo",
+                           f"Siguiente en {restante:.0f}s  |  ESPACIO: nuevo  |  P/V: corregir",
                            (10, h - 18),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                            (180, 180, 180), 1)
 
                 if ahora - tiempo_resultado > 5.0:
@@ -193,6 +197,7 @@ class Camera:
             if key == ord('q') or key == ord('Q'):
                 print("  👋 Saliendo...")
                 break
+
             elif key == ord(' '):
                 if estado == PREVIEW:
                     estado           = COUNTDOWN
@@ -202,6 +207,26 @@ class Camera:
                     estado           = COUNTDOWN
                     tiempo_countdown = time.time()
                     print("\n  ⏳ Iniciando cuenta regresiva...")
+
+            elif key == ord('p') or key == ord('P'):
+                if estado == RESULTADO and ultimo_resultado:
+                    ultimo_resultado["conclusion"]               = "PLASTICO"
+                    ultimo_resultado["hardware"]["compuerta"]    = "derecha"
+                    ultimo_resultado["hardware"]["led"]          = "verde"
+                    ultimo_resultado["hardware"]["angulo_servo"] = 135
+                    ultimo_resultado["hardware"]["mensaje"]      = "PLÁSTICO — corregido manualmente"
+                    tiempo_resultado = time.time()  # reinicia el countdown
+                    print("  ✏️  Corregido manualmente → PLASTICO")
+
+            elif key == ord('v') or key == ord('V'):
+                if estado == RESULTADO and ultimo_resultado:
+                    ultimo_resultado["conclusion"]               = "VIDRIO"
+                    ultimo_resultado["hardware"]["compuerta"]    = "izquierda"
+                    ultimo_resultado["hardware"]["led"]          = "azul"
+                    ultimo_resultado["hardware"]["angulo_servo"] = 45
+                    ultimo_resultado["hardware"]["mensaje"]      = "VIDRIO — corregido manualmente"
+                    tiempo_resultado = time.time()  # reinicia el countdown
+                    print("  ✏️  Corregido manualmente → VIDRIO")
 
         self.detener()
 
@@ -258,7 +283,7 @@ class Camera:
                    cv2.FONT_HERSHEY_SIMPLEX, 1.1,
                    (255, 255, 255), 2)
 
-        # Compuerta o mensaje
+        # Compuerta o mensaje no permitido
         if compuerta != "ninguna":
             texto_comp = f"Compuerta: {compuerta.upper()}"
             tam3 = cv2.getTextSize(texto_comp,
@@ -268,9 +293,18 @@ class Camera:
                        (x3, h//2 + 55),
                        cv2.FONT_HERSHEY_SIMPLEX, 1.0,
                        color, 2)
+
+            # Hint de corrección manual solo cuando hay resultado válido
+            hint = "Incorrecto?  P = Plastico  |  V = Vidrio"
+            tam_h = cv2.getTextSize(hint, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+            x_h   = (w - tam_h[0]) // 2
+            cv2.putText(frame, hint,
+                       (x_h, h//2 + 100),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                       (150, 150, 150), 1)
         else:
-            # Mensaje de no permitido — texto destacado en rojo
-            texto_np = "⚠ OBJETO NO PERMITIDO EN ESTE TACHO"
+            # Mensaje de no permitido
+            texto_np = "OBJETO NO PERMITIDO EN ESTE TACHO"
             tam4 = cv2.getTextSize(texto_np,
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
             x4   = (w - tam4[0]) // 2
@@ -279,7 +313,6 @@ class Camera:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                        (0, 0, 255), 2)
 
-            # Segundo mensaje más pequeño
             tam5 = cv2.getTextSize(mensaje,
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, 1)[0]
             x5   = (w - tam5[0]) // 2
@@ -312,24 +345,19 @@ class Camera:
             resultado = None
 
             if tm_classifier:
-                # Paso 1: TM clasifica rápido usando el modelo ya cargado
                 img = cv2.imread(ruta)
                 atributos_tm, clase_tm, prob_tm = tm_classifier.analizar_frame(img)
 
                 print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%})")
 
                 if prob_tm >= 0.95:
-                    # Muy alta confianza — TM solo, sin Gemini
                     print(f"  ✅ Confianza muy alta — usando TM directamente")
                     resultado = extractor.analizar_y_clasificar_tm(
                         ruta, clf=tm_classifier)
                 else:
-                    # Confianza menor al 95% — Gemini confirma
-                    # Esto cubre objetos no permitidos (latas, cartón, manos, etc.)
                     print(f"  ⚠ Confianza {prob_tm:.1%} < 95% — confirmando con Gemini...")
                     resultado = extractor.analizar_y_clasificar(ruta)
             else:
-                # Sin TM — Gemini directamente
                 resultado = extractor.analizar_y_clasificar(ruta)
 
             print(f"\n  {'═'*50}")
@@ -380,10 +408,8 @@ if __name__ == "__main__":
     print("  RECI — SISTEMA DE RECICLAJE INTELIGENTE")
     print("█"*50)
 
-    # Gemini siempre disponible como respaldo
     extractor = AttributeExtractor()
 
-    # TM se carga UNA SOLA VEZ al arrancar
     tm_classifier = None
     try:
         tm_classifier = TeachableMachineClassifier()

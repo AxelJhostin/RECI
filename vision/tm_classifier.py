@@ -365,7 +365,7 @@ class TeachableMachineClassifier:
     def _inferir(self, imagen_bgr: np.ndarray) -> tuple:
         img = cv2.resize(imagen_bgr, (self.ancho, self.altura))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = img.astype(np.float32) / 255.0
+        img = img.astype(np.float32)
         img = np.expand_dims(img, axis=0)
 
         self.interpreter.set_tensor(self.input_details[0]['index'], img)
