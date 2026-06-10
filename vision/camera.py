@@ -47,10 +47,10 @@ class Camera:
         Modo demo para presentaciones y pruebas.
         ESPACIO → cuenta regresiva → captura → análisis → resultado
 
-        Flujo de análisis:
-        - TM >= 95% confianza → resultado inmediato sin llamar Gemini
-        - TM <  95% confianza → Gemini confirma (maneja objetos no permitidos)
-        - Sin modelo TM       → Gemini directamente
+        Tres destinos posibles:
+        - VIDRIO    → compuerta izquierda
+        - PLASTICO  → compuerta derecha
+        - Resto     → tacho general (con botones P/V para corregir si hay error)
 
         Corrección manual en pantalla de resultado:
         - P → corregir a PLÁSTICO
@@ -215,7 +215,7 @@ class Camera:
                     ultimo_resultado["hardware"]["led"]          = "verde"
                     ultimo_resultado["hardware"]["angulo_servo"] = 135
                     ultimo_resultado["hardware"]["mensaje"]      = "PLÁSTICO — corregido manualmente"
-                    tiempo_resultado = time.time()  # reinicia el countdown
+                    tiempo_resultado = time.time()
                     print("  ✏️  Corregido manualmente → PLASTICO")
 
             elif key == ord('v') or key == ord('V'):
@@ -225,7 +225,7 @@ class Camera:
                     ultimo_resultado["hardware"]["led"]          = "azul"
                     ultimo_resultado["hardware"]["angulo_servo"] = 45
                     ultimo_resultado["hardware"]["mensaje"]      = "VIDRIO — corregido manualmente"
-                    tiempo_resultado = time.time()  # reinicia el countdown
+                    tiempo_resultado = time.time()
                     print("  ✏️  Corregido manualmente → VIDRIO")
 
         self.detener()
@@ -237,8 +237,13 @@ class Camera:
         cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
 
     def _dibujar_resultado(self, frame, h, w, resultado):
-        """Dibuja el resultado grande y claro sobre el frame."""
+        """
+        Dibuja el resultado sobre el frame.
 
+        VIDRIO   → texto naranja, compuerta izquierda
+        PLASTICO → texto verde, compuerta derecha
+        Resto    → texto rojo, tacho general + botones P/V para corregir
+        """
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
@@ -264,7 +269,7 @@ class Camera:
         }
         color = colores.get(conclusion, (0, 0, 255))
 
-        # Categoría — texto grande centrado
+        # ── Categoría — texto grande centrado ────────────────────
         tam = cv2.getTextSize(conclusion,
                               cv2.FONT_HERSHEY_SIMPLEX, 3.5, 8)[0]
         x   = (w - tam[0]) // 2
@@ -273,7 +278,7 @@ class Camera:
                    cv2.FONT_HERSHEY_SIMPLEX, 3.5,
                    color, 8)
 
-        # Confianza
+        # ── Confianza ─────────────────────────────────────────────
         texto_conf = f"Confianza: {confianza*100:.1f}%"
         tam2 = cv2.getTextSize(texto_conf,
                                cv2.FONT_HERSHEY_SIMPLEX, 1.1, 2)[0]
@@ -283,8 +288,9 @@ class Camera:
                    cv2.FONT_HERSHEY_SIMPLEX, 1.1,
                    (255, 255, 255), 2)
 
-        # Compuerta o mensaje no permitido
+        # ── Destino del objeto ────────────────────────────────────
         if compuerta != "ninguna":
+            # VIDRIO o PLASTICO — mostrar compuerta
             texto_comp = f"Compuerta: {compuerta.upper()}"
             tam3 = cv2.getTextSize(texto_comp,
                                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
@@ -293,35 +299,37 @@ class Camera:
                        (x3, h//2 + 55),
                        cv2.FONT_HERSHEY_SIMPLEX, 1.0,
                        color, 2)
-
-            # Hint de corrección manual solo cuando hay resultado válido
-            hint = "Incorrecto?  P = Plastico  |  V = Vidrio"
-            tam_h = cv2.getTextSize(hint, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
-            x_h   = (w - tam_h[0]) // 2
-            cv2.putText(frame, hint,
-                       (x_h, h//2 + 100),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.55,
-                       (150, 150, 150), 1)
         else:
-            # Mensaje de no permitido
-            texto_np = "OBJETO NO PERMITIDO EN ESTE TACHO"
-            tam4 = cv2.getTextSize(texto_np,
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+            # Tacho general — mostrar destino claramente
+            texto_tg = "DEPOSITAR EN TACHO GENERAL"
+            tam4 = cv2.getTextSize(texto_tg,
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
             x4   = (w - tam4[0]) // 2
-            cv2.putText(frame, texto_np,
+            cv2.putText(frame, texto_tg,
                        (x4, h//2 + 55),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.9,
                        (0, 0, 255), 2)
 
+            # Submensaje más pequeño
             tam5 = cv2.getTextSize(mensaje,
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.65, 1)[0]
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
             x5   = (w - tam5[0]) // 2
             cv2.putText(frame, mensaje,
-                       (x5, h//2 + 95),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.65,
+                       (x5, h//2 + 90),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                        (180, 180, 180), 1)
 
-        # Barra de confianza
+        # ── Hint de corrección — SIEMPRE visible ─────────────────
+        # Permite corregir tanto si fue a compuerta como a tacho general
+        hint = "Incorrecto?  P = Plastico  |  V = Vidrio"
+        tam_h = cv2.getTextSize(hint, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+        x_h   = (w - tam_h[0]) // 2
+        cv2.putText(frame, hint,
+                   (x_h, h//2 + 125),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                   (150, 150, 150), 1)
+
+        # ── Barra de confianza ────────────────────────────────────
         barra_w = int((w - 200) * confianza)
         cv2.rectangle(frame, (100, h - 45),
                      (w - 100, h - 25),
@@ -332,14 +340,9 @@ class Camera:
 
     def _analizar(self, extractor, ruta, tm_classifier=None):
         """
-        Analiza una imagen con el sistema experto.
-
         Flujo híbrido TM + Gemini:
-        - TM >= 95% confianza → resultado inmediato, no llama Gemini
-        - TM <  95% confianza → Gemini confirma (identifica objetos no permitidos)
-        - Sin modelo TM       → Gemini directamente
-
-        El tm_classifier se pasa ya cargado — no se recarga en cada llamada.
+        - TM >= 95% → resultado inmediato
+        - TM <  95% → Gemini confirma (puede retornar tacho general)
         """
         try:
             resultado = None
@@ -351,35 +354,34 @@ class Camera:
                 print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%})")
 
                 if prob_tm >= 0.95:
-                    print(f"  ✅ Confianza muy alta — usando TM directamente")
+                    print(f"  ✅ Confianza alta — TM directo")
                     resultado = extractor.analizar_y_clasificar_tm(
                         ruta, clf=tm_classifier)
                 else:
-                    print(f"  ⚠ Confianza {prob_tm:.1%} < 95% — confirmando con Gemini...")
+                    print(f"  ⚠ Confianza {prob_tm:.1%} < 95% — Gemini confirma...")
                     resultado = extractor.analizar_y_clasificar(ruta)
             else:
                 resultado = extractor.analizar_y_clasificar(ruta)
 
+            conclusion = resultado["conclusion"]
+            hardware   = resultado["hardware"]
+
             print(f"\n  {'═'*50}")
-            print(f"  RESULTADO: {resultado['conclusion']}")
-            print(f"  CONFIANZA: {resultado['confianza']*100:.1f}%")
-            print(f"  COMPUERTA: {resultado['hardware']['compuerta']}")
-            print(f"  MENSAJE  : {resultado['hardware']['mensaje']}")
+            print(f"  RESULTADO : {conclusion}")
+            print(f"  DESTINO   : {hardware['compuerta'] if hardware['compuerta'] != 'ninguna' else 'tacho general'}")
+            print(f"  MENSAJE   : {hardware['mensaje']}")
             print(f"  {'═'*50}\n")
             return resultado
 
         except Exception as e:
             if "429" in str(e):
-                print("  ⚠ Rate limit Gemini — espera unos segundos e intenta de nuevo")
+                print("  ⚠ Rate limit Gemini — espera unos segundos")
             else:
-                print(f"  ❌ Error al analizar: {e}")
+                print(f"  ❌ Error: {e}")
             return None
 
     def capturar_y_clasificar(self, extractor, tm_classifier=None, delay=2):
-        """
-        Para integración con Raspberry Pi y sensor ultrasónico.
-        Usa el mismo flujo híbrido TM + Gemini.
-        """
+        """Para Raspberry Pi + sensor ultrasónico."""
         if not self.cap or not self.cap.isOpened():
             self.iniciar()
         print(f"  ⏳ Capturando en {delay} segundos...")
@@ -388,7 +390,6 @@ class Camera:
         return self._analizar(extractor, ruta, tm_classifier=tm_classifier)
 
     def detener(self):
-        """Libera la cámara."""
         if self.cap:
             self.cap.release()
         cv2.destroyAllWindows()
@@ -413,9 +414,9 @@ if __name__ == "__main__":
     tm_classifier = None
     try:
         tm_classifier = TeachableMachineClassifier()
-        print("  🤖 Modo: TM + Gemini (TM >= 95% directo, resto confirma Gemini)")
+        print("  🤖 Modo: TM + Gemini (TM >= 95% directo)")
     except FileNotFoundError:
-        print("  🔮 Modo: Solo Gemini (modelo TM no disponible)")
+        print("  🔮 Modo: Solo Gemini")
 
     camara = Camera()
 

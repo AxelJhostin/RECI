@@ -28,10 +28,6 @@ class InferenceEngine:
         self.contexto_meta           = {}
 
     def cargar_hechos(self, resultado_ml: dict):
-        """
-        Carga los atributos detectados por el modelo ML
-        en la memoria de trabajo.
-        """
         self.memoria.limpiar()
         self.reglas_disparadas       = []
         self.conclusion_final        = None
@@ -44,7 +40,6 @@ class InferenceEngine:
         self.cf_por_categoria        = {}
         self.contexto_meta           = {}
 
-        # Validar antes de cargar
         es_valido, errores, advertencias = self.validator.validar(resultado_ml)
         self.errores_validacion      = errores
         self.advertencias_validacion = advertencias
@@ -58,25 +53,18 @@ class InferenceEngine:
         return True
 
     def ejecutar(self):
-        """
-        Ciclo principal de inferencia.
-        Orden: meta-reglas → forward chaining → CF MYCIN → ajustes meta → backward chaining
-        """
         if self.errores_validacion:
             return self.conclusion_final, self.confianza_final, []
 
         hechos = self.memoria.obtener_todos()
         reglas = self.kb.obtener_reglas()
 
-        # ── 1. Ejecutar meta-reglas ───────────────────────────────
         self.contexto_meta = self.meta_engine.ejecutar(hechos)
 
-        # ── 2. Forward chaining — evaluar reglas ─────────────────
         for regla in reglas:
             if regla.evaluar(hechos):
                 self.reglas_disparadas.append(regla)
 
-        # ── 3. Prioridad absoluta: desconocido con baja confianza ─
         if (hechos.get("confianza_ml") == "baja" and
                 hechos.get("objeto_reconocido") == "desconocido"):
             self.conclusion_final = "DESCONOCIDO"
@@ -87,7 +75,6 @@ class InferenceEngine:
             self.confianza_final  = 0.0
 
         else:
-            # ── 4. CF MYCIN ───────────────────────────────────────
             categorias = ["VIDRIO", "PLASTICO", "ORGANICO", "LATA", "DESCONOCIDO"]
             self.cf_por_categoria = CertaintyFactor.comparar_categorias(
                 self.reglas_disparadas, categorias)
@@ -96,21 +83,17 @@ class InferenceEngine:
                 self.conclusion_final = "DESCONOCIDO"
                 self.confianza_final  = 0.0
             else:
-                # ── 5. Aplicar ajustes de meta-reglas ────────────
                 cf_ajustado = dict(self.cf_por_categoria)
 
-                # Excluir categorías prohibidas
                 for cat in self.contexto_meta.get("excluir_categorias", []):
                     cf_ajustado.pop(cat, None)
 
-                # Aplicar factor de prioridad
                 cat_prioritaria = self.contexto_meta.get("priorizar_categoria")
                 factor          = self.contexto_meta.get("factor_prioridad", 1.0)
                 if cat_prioritaria and cat_prioritaria in cf_ajustado:
                     cf_ajustado[cat_prioritaria] = min(
                         1.0, cf_ajustado[cat_prioritaria] * factor)
 
-                # Aplicar sesgos
                 sesgo_p = self.contexto_meta.get("sesgo_plastico", 0)
                 sesgo_o = self.contexto_meta.get("sesgo_organico", 0)
                 if sesgo_p > 0 and "PLASTICO" in cf_ajustado:
@@ -128,7 +111,6 @@ class InferenceEngine:
                     mejor_cf  = cf_ajustado[mejor_cat]
                     umbral    = self.contexto_meta.get("umbral_minimo_cf", 0.0)
 
-                    # Modo cauteloso — si CF no supera umbral → DESCONOCIDO
                     if self.contexto_meta.get("modo_cauteloso") and mejor_cf < umbral:
                         self.conclusion_final = "DESCONOCIDO"
                         self.confianza_final  = 0.0
@@ -136,17 +118,14 @@ class InferenceEngine:
                         self.conclusion_final = mejor_cat
                         self.confianza_final  = round(mejor_cf, 3)
 
-                    # Distribución ajustada
                     self.distribucion = {
                         k: round(v, 3) for k, v in cf_ajustado.items()
                     }
 
-        # ── 6. Backward chaining — verificación ──────────────────
         resultado_bw, score_bw, _ = self.backward_engine.ejecutar(hechos)
         self.resultado_backward   = resultado_bw
         self.score_backward       = score_bw
 
-        # Advertir si backward contradice forward con alta confianza
         if (resultado_bw and
                 self.conclusion_final not in ["DESCONOCIDO", "LATA"] and
                 resultado_bw != self.conclusion_final and
@@ -168,9 +147,6 @@ class InferenceEngine:
         return self.conclusion_final, self.confianza_final, self.reglas_disparadas
 
     def obtener_explicacion(self):
-        """
-        Genera explicación legible del razonamiento completo.
-        """
         if not self.conclusion_final:
             return "No se ha ejecutado ninguna inferencia todavía."
 
@@ -179,13 +155,11 @@ class InferenceEngine:
         lineas.append("  SISTEMA EXPERTO RECI — EXPLICACIÓN DEL RAZONAMIENTO")
         lineas.append("=" * 60)
 
-        # Advertencias de validación
         if self.advertencias_validacion:
             lineas.append(f"\n  ⚠ ADVERTENCIAS DE VALIDACIÓN:")
             for a in self.advertencias_validacion:
                 lineas.append(f"    • {a}")
 
-        # Meta-reglas aplicadas
         if self.contexto_meta.get("meta_reglas_aplicadas"):
             lineas.append(f"\n  META-REGLAS APLICADAS:")
             for mr in self.contexto_meta["meta_reglas_aplicadas"]:
@@ -193,12 +167,10 @@ class InferenceEngine:
             if self.contexto_meta.get("nota"):
                 lineas.append(f"    → {self.contexto_meta['nota']}")
 
-        # Hechos analizados
         lineas.append(f"\n  HECHOS ANALIZADOS:")
         for atributo, valor in self.memoria.obtener_todos().items():
             lineas.append(f"    • {atributo:25} = {valor}")
 
-        # Reglas disparadas
         lineas.append(f"\n  REGLAS DISPARADAS ({len(self.reglas_disparadas)}):")
         if self.reglas_disparadas:
             for regla in self.reglas_disparadas:
@@ -208,11 +180,9 @@ class InferenceEngine:
         else:
             lineas.append("    Ninguna regla se disparó.")
 
-        # Conclusión
         lineas.append(f"\n  CONCLUSIÓN FINAL:  {self.conclusion_final}")
         lineas.append(f"  CONFIANZA:         {self.confianza_final * 100:.1f}%")
 
-        # Distribución de confianza
         if self.distribucion and len(self.distribucion) > 1:
             lineas.append(f"\n  DISTRIBUCIÓN DE CONFIANZA:")
             for cat, peso in sorted(self.distribucion.items(),
@@ -221,13 +191,14 @@ class InferenceEngine:
                 lineas.append(f"    {cat:12} [{barra:20}] {peso*100:.1f}%")
 
         if self.conclusion_final == "DESCONOCIDO":
-            lineas.append("\n  ⚠ Objeto no clasificable — se solicita segunda captura.")
+            lineas.append("\n  ♻ Depositar en tacho general.")
         elif self.conclusion_final == "LATA":
-            lineas.append("\n  ⚠ Lata detectada — no pertenece a ningún compartimento RECI.")
+            lineas.append("\n  ♻ Lata detectada — depositar en tacho general.")
+        elif self.conclusion_final == "ORGANICO":
+            lineas.append("\n  ♻ Orgánico/papel detectado — depositar en tacho general.")
 
         lineas.append("=" * 60)
 
-        # Backward chaining
         if self.resultado_backward:
             consistente = self.resultado_backward == self.conclusion_final
             icono = "✅" if consistente else "⚠"
@@ -240,7 +211,6 @@ class InferenceEngine:
             else:
                 lineas.append(f"    ⚠ Discrepancia — revisar con precaución")
 
-        # CF por categoría
         if self.cf_por_categoria:
             lineas.append(f"\n  FACTOR DE CERTEZA (CF) POR CATEGORÍA:")
             for cat, cf in self.cf_por_categoria.items():
@@ -254,17 +224,44 @@ class InferenceEngine:
         return "\n".join(lineas)
 
     def decision_hardware(self):
+        """
+        Traduce la conclusión a instrucción física para el Raspberry Pi.
+
+        VIDRIO    → compuerta izquierda (servo 45°, LED azul)
+        PLASTICO  → compuerta derecha   (servo 135°, LED verde)
+        Resto     → tacho general       (servo 0°, LED rojo)
+        """
         acciones = {
-            "VIDRIO":      {"compuerta": "izquierda", "led": "azul",
-                        "angulo_servo": 45,  "mensaje": "VIDRIO detectado — abriendo compartimento izquierdo"},
-            "PLASTICO":    {"compuerta": "derecha",   "led": "verde",
-                        "angulo_servo": 135, "mensaje": "PLÁSTICO detectado — abriendo compartimento derecho"},
-            "ORGANICO":    {"compuerta": "ninguna",   "led": "rojo",
-                        "angulo_servo": 0,   "mensaje": "Solo se acepta plástico y vidrio"},
-            "LATA":        {"compuerta": "ninguna",   "led": "rojo",
-                        "angulo_servo": 0,   "mensaje": "Solo se acepta plástico y vidrio"},
-            "DESCONOCIDO": {"compuerta": "ninguna",   "led": "rojo",
-                        "angulo_servo": 0,   "mensaje": "Solo se acepta plástico y vidrio"},
+            "VIDRIO":      {
+                "compuerta":    "izquierda",
+                "led":          "azul",
+                "angulo_servo": 45,
+                "mensaje":      "VIDRIO — depositar en compartimento izquierdo"
+            },
+            "PLASTICO":    {
+                "compuerta":    "derecha",
+                "led":          "verde",
+                "angulo_servo": 135,
+                "mensaje":      "PLÁSTICO — depositar en compartimento derecho"
+            },
+            "ORGANICO":    {
+                "compuerta":    "ninguna",
+                "led":          "rojo",
+                "angulo_servo": 0,
+                "mensaje":      "Depositar en tacho general"
+            },
+            "LATA":        {
+                "compuerta":    "ninguna",
+                "led":          "rojo",
+                "angulo_servo": 0,
+                "mensaje":      "Depositar en tacho general"
+            },
+            "DESCONOCIDO": {
+                "compuerta":    "ninguna",
+                "led":          "rojo",
+                "angulo_servo": 0,
+                "mensaje":      "Depositar en tacho general"
+            },
         }
         return acciones.get(self.conclusion_final, acciones["DESCONOCIDO"])
 
