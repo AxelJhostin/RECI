@@ -21,18 +21,23 @@ class Goal:
 
 class CondicionRequisito:
     """Una condición individual dentro de un goal."""
-    def __init__(self, atributo, valores_aceptables, peso=1.0, descripcion=""):
+    def __init__(self, atributo, valores_aceptables, peso=1.0, descripcion="",
+                 eliminatoria=False):
         """
         atributo           : nombre del atributo a verificar
         valores_aceptables : lista de valores que satisfacen la condición
         peso               : importancia de esta condición (0-1)
         descripcion        : explicación legible
+        eliminatoria       : si es True y la condición falla, el goal queda
+                             descartado de inmediato sin importar el score
+                             (para hechos "siempre/nunca" que no admiten excepción)
         """
         self.atributo          = atributo
         self.valores_aceptables = valores_aceptables if isinstance(
             valores_aceptables, list) else [valores_aceptables]
         self.peso              = peso
         self.descripcion       = descripcion
+        self.eliminatoria      = eliminatoria
 
     def evaluar(self, hechos: dict):
         """Retorna True si el hecho actual satisface esta condición."""
@@ -78,7 +83,8 @@ class BackwardChainingEngine:
                 CondicionRequisito(
                     "tapa", ["corona_metalica", "twist_off_metalica",
                              "tapa_ancha_metalica"], peso=0.90,
-                    descripcion="Las botellas de vidrio siempre tienen tapa metálica"
+                    descripcion="Las botellas de vidrio siempre tienen tapa metálica",
+                    eliminatoria=True
                 ),
                 CondicionRequisito(
                     "textura", ["lisa_brillante"], peso=0.80,
@@ -152,10 +158,6 @@ class BackwardChainingEngine:
                     descripcion="Los residuos orgánicos y papel tienen poco o ningún brillo"
                 ),
                 CondicionRequisito(
-                    "rigidez", ["flexible", "indefinido", "rigido"], peso=0.75,
-                    descripcion="Los residuos orgánicos son flexibles o amorfos; el Tetra Pak y cartón son rígidos"
-                ),
-                CondicionRequisito(
                     "color", ["marron_tierra", "variado_vivo", "blanco_opaco"], peso=0.65,
                     descripcion="Colores típicos de orgánicos: marrón, naranja, blanco"
                 ),
@@ -173,7 +175,8 @@ class BackwardChainingEngine:
             requisitos=[
                 CondicionRequisito(
                     "brillo", ["metalico"], peso=1.0,
-                    descripcion="Las latas tienen brillo metálico muy distintivo"
+                    descripcion="Las latas tienen brillo metálico muy distintivo",
+                    eliminatoria=True
                 ),
                 CondicionRequisito(
                     "color", ["metalico"], peso=0.95,
@@ -198,6 +201,10 @@ class BackwardChainingEngine:
         """
         Verifica si los hechos actuales confirman una hipótesis.
         Retorna (confirmado, score, condiciones_cumplidas, condiciones_fallidas)
+
+        Si una condición eliminatoria falla, el goal queda descartado
+        (confirmado=False) sin importar qué tan alto sea el score —
+        son hechos del tipo "siempre/nunca" que no admiten excepción.
         """
         if categoria not in self.goals:
             return False, 0.0, [], []
@@ -207,6 +214,7 @@ class BackwardChainingEngine:
         condiciones_fallidas  = []
         peso_total    = sum(c.peso for c in goal.requisitos)
         peso_cumplido = 0.0
+        eliminado     = False
 
         for condicion in goal.requisitos:
             if condicion.evaluar(hechos):
@@ -214,9 +222,11 @@ class BackwardChainingEngine:
                 peso_cumplido += condicion.peso
             else:
                 condiciones_fallidas.append(condicion)
+                if condicion.eliminatoria:
+                    eliminado = True
 
         score = peso_cumplido / peso_total if peso_total > 0 else 0.0
-        confirmado = score >= goal.umbral_confianza
+        confirmado = score >= goal.umbral_confianza and not eliminado
 
         return confirmado, round(score, 3), condiciones_cumplidas, condiciones_fallidas
 
@@ -282,7 +292,8 @@ class BackwardChainingEngine:
                 lineas.append(f"    Condiciones fallidas ({len(datos['fallidas'])}):")
                 for c in datos["fallidas"]:
                     valor_actual = hechos.get(c.atributo, "no disponible")
-                    lineas.append(f"      ✗ {c.descripcion}")
+                    marca = " [ELIMINATORIA — descarta esta categoría]" if c.eliminatoria else ""
+                    lineas.append(f"      ✗ {c.descripcion}{marca}")
                     lineas.append(f"        (valor actual: {valor_actual}, "
                                  f"esperado: {c.valores_aceptables})")
 
