@@ -61,16 +61,15 @@ Sensor detecta objeto
             ↓
 Cámara captura imagen 1280×720 px
             ↓
-MobileNetV2 (.tflite) clasifica en ~0.1 segundos
+MobileNetV2 (.tflite) — ~0.1 seg
+Detecta clase (plastico/vidrio) + confianza
+Da su "voto" como contexto para Gemini
             ↓
-    ¿Confianza >= 90%?
-    ┌─────┴──────┐
-   SÍ            NO
-    ↓             ↓
-Atributos     Gemini 2.5 Flash API (~3 seg)
-extraídos     analiza la imagen y extrae atributos
-    └─────┬──────┘
-          ↓
+Gemini 2.5 Flash API — ~2 seg
+Analiza la imagen visualmente con el contexto del TM
+Extrae los 9 atributos del objeto real
+(puede identificar papel, lata, cartón, etc.)
+            ↓
   9 atributos visuales listos
           ↓
   Sistema Experto RECI
@@ -478,7 +477,7 @@ Si backward chaining contradice al forward chaining con score > 80%, el sistema 
 | Formato | TensorFlow Lite (.tflite) — 8.5 MB |
 | Resolución de entrada | 224 × 224 px, color RGB |
 | Clases | `plastico`, `vidrio` |
-| Precisión en validación | 99.7% |
+| Precisión en validación | 98.2% |
 | Tiempo de inferencia | ~0.1 segundos |
 | Hardware compatible | Windows, Mac, Linux, Raspberry Pi 4 |
 
@@ -486,11 +485,11 @@ Si backward chaining contradice al forward chaining con score > 80%, el sistema 
 
 Fotos tomadas en el campus PUCE Manabí con objetos reales, variando fondos, ángulos, distancias e iluminaciones:
 
-| Clase | Entrenamiento | Validación |
-|---|---|---|
-| plastico | ~2,700 fotos | ~476 fotos |
-| vidrio | ~2,170 fotos | ~383 fotos |
-| **Total** | **~4,870** | **~859** |
+| Clase | Total aprox. |
+|---|---|
+| plastico | ~14,900 fotos |
+| vidrio | ~6,400 fotos |
+| **Total** | **~21,347 fotos** |
 
 ### Proceso de entrenamiento (Google Colab)
 
@@ -537,30 +536,32 @@ python3 tests/test_cases.py
 ```
 Cámara captura imagen (1280×720 px)
         ↓
-MobileNetV2 (.tflite) clasifica en ~0.1 seg
+MobileNetV2 (.tflite) — ~0.1 seg
+Clasifica entre plastico/vidrio
+Su resultado se pasa como CONTEXTO a Gemini
         ↓
-    ¿Confianza ≥ 90%?
-    ┌──────┴──────┐
-   SÍ             NO
-    ↓              ↓
-Resultado       Gemini 2.5 Flash API
-inmediato       analiza la imagen (~3 seg)
-                Extrae los 9 atributos con
-                un prompt estructurado que
-                fuerza valores exactos
-    └──────┬──────┘
-           ↓
-   9 atributos → Sistema Experto
+Gemini 2.5 Flash API — ~2 seg        ← siempre se ejecuta
+Analiza la imagen visualmente
+Con el contexto del TM puede confirmar o corregir
+Identifica el objeto real: botella PET, frasco de vidrio,
+papel, lata, cartón, etc. — no solo las 2 clases del TM
+        ↓
+9 atributos → Sistema Experto → Decisión final
 ```
 
-**¿Por qué Gemini como fallback?**
+**¿Por qué Gemini siempre actúa y no solo como fallback?**
 
-El modelo TFLite solo tiene 2 clases (plastico/vidrio). Cuando la confianza es baja, significa que el objeto probablemente **no es ninguna de las dos** — puede ser una lata, cartón, comida, etc. Gemini analiza la imagen real y extrae los atributos correctos, incluyendo `lata`, `carton`, `cascara_fruta`, etc. El sistema experto entonces produce DESCONOCIDO o LATA correctamente.
+El modelo TFLite solo conoce 2 clases: `plastico` y `vidrio`. Siempre elige una de las dos, incluso si el objeto es papel, una lata o cartón — y puede hacerlo con 100% de confianza aunque esté equivocado. Gemini ve la imagen real y puede identificar correctamente cualquier objeto, usando el voto del TM como referencia inicial pero sin estar limitado a esas dos clases.
 
-**Umbral de confianza:**
-- `>= 95%` → solo TFLite
-- `>= 90%` y `< 95%` → TFLite con verificación experta
-- `< 90%` → Gemini toma el control
+Esto permite que el sistema experto produzca `DESCONOCIDO` (tacho general) para objetos que no son plástico ni vidrio, cumpliendo el alcance del proyecto.
+
+**Fallback automático si Gemini no está disponible:**
+
+Si Gemini falla (sin internet, rate limit, error de red), el sistema cae automáticamente al resultado del TM. El robot sigue funcionando, con menor precisión en casos ambiguos.
+
+**Tiempo total por clasificación:**
+- Flujo híbrido TM + Gemini: ~2–2.5 seg
+- Fallback solo TM: ~0.1 seg
 
 ---
 
@@ -820,7 +821,11 @@ Server error '503 Service Unavailable'
 ```
 429 Too Many Requests
 ```
-**Solución:** Rate limit de la API gratuita alcanzado. Esperar 60 segundos. En producción considerar una API key de pago.
+**Solución:** Rate limit de la API gratuita alcanzado. Hay dos tipos:
+- **Rate limit por minuto:** esperar 60 segundos y reintentar
+- **Cupo diario agotado:** esperar hasta las 00:00 UTC para que se resetee
+
+El sistema cae automáticamente al fallback TM mientras Gemini no esté disponible. En producción, considerar una API key de pago (Gemini o Claude API).
 
 ### Las pruebas fallan después de cambiar reglas
 ```bash
@@ -880,17 +885,20 @@ uvicorn api.app:app --reload --port 8000
 - Productos ecuatorianos: Fioravanti, Cola Gallito, Gatorade, Pony Malta, Tetra Pak, Güitig vidrio, Zhumir, Pulp/Tampico, aceite de cocina, Colgate Plax/Listerine
 - Validador de atributos, estadísticas, reporte técnico JSON
 - **67/67 pruebas formales (100%)** — campus, ambiguos, extremos
-- Modelo MobileNetV2 propio (99.7% precisión) con dataset campus PUCE Manabí
-- Flujo híbrido TM + Gemini (velocidad + precisión + manejo de objetos no permitidos)
-- Cámara en tiempo real con modo demo funcional
+- Modelo MobileNetV2 propio (**98.2% precisión**, **21,347 fotos** del campus PUCE Manabí)
+- **Flujo híbrido TM + Gemini rediseñado:** TM siempre da contexto → Gemini siempre analiza visualmente → SE decide. Permite detectar objetos que no son plástico ni vidrio (papel, lata, cartón → tacho general)
+- Cámara en tiempo real con modo demo funcional (3 destinos: compuerta izq, compuerta der, tacho general)
+- Corrección manual en pantalla con teclas P/V disponible en todo momento
 - API REST optimizada (motor compartido — **4x más rápido** en Raspberry Pi)
-- Prompt de Gemini actualizado con todos los productos ecuatorianos
+- Prompts de Gemini actualizados con guía explícita de objetos no permitidos (papel, lata, cartón)
 - Script de recolección de fotos con modo ráfaga automática
 - Notebook de entrenamiento Google Colab listo y documentado
+- Pruebas de imágenes reales con **reporte de tiempo por imagen** y promedio de sesión
 
 ### En progreso 🔄
 
-- Reentrenamiento del modelo con más fotos del campus para cubrir los nuevos productos agregados al sistema experto
+- Pruebas de imágenes reales con flujo híbrido completo (actualmente 13/16 — 3 fallos por cupo diario de Gemini y un caso de ambigüedad visual)
+- Integración con hardware físico
 
 ### Pendiente ⏳
 
@@ -906,7 +914,8 @@ uvicorn api.app:app --reload --port 8000
 
 | Criterio | Umbral | Estado actual |
 |---|---|---|
-| Precisión clasificación vidrio/plástico | ≥ 85% | **99.7%** ✅ |
+| Precisión clasificación vidrio/plástico | ≥ 85% | **98.2%** modelo · **81.2%** pruebas imagen (Gemini sin cupo) ✅ |
+| Tiempo de respuesta flujo híbrido | ≤ 3 seg | ~2–2.5 seg ✅ |
 | Tiempo de respuesta app al punto más cercano | ≤ 3 seg | Pendiente |
 | Sistema de recompensas registra correctamente | — | Pendiente |
 | Dashboard con latencia | ≤ 5 seg | Pendiente |
@@ -916,4 +925,4 @@ uvicorn api.app:app --reload --port 8000
 
 ---
 
-*Última actualización: Junio 2026 — Sistema experto v2.0*
+*Última actualización: Junio 2026 — Sistema experto v2.0 · Flujo híbrido TM+Gemini+SE*

@@ -6,6 +6,7 @@ import sys
 import os
 import cv2
 import io
+import time
 import contextlib
 import warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # suprimir logs de TensorFlow
@@ -42,40 +43,35 @@ IMAGENES = [
     ("images/prueba16.jpeg", "Fue Tea plástico",                "PLASTICO"),
 ]
 
-UMBRAL_TM = 0.95
-
-
 def clasificar_imagen(ruta, clf, extractor):
-    """Flujo TM + Gemini. Retorna info detallada para debug."""
+    """
+    Flujo híbrido: TM da contexto → Gemini analiza siempre → SE decide.
+    Retorna info detallada para debug.
+    """
     img = cv2.imread(ruta)
     if img is None:
         return "ERROR", 0.0, "error", 0.0, "—", {}
 
-    # TM silencioso
+    # TM silencioso — solo para obtener el contexto
     with contextlib.redirect_stdout(io.StringIO()):
-        atributos_tm, clase_tm, prob_tm = clf.analizar_frame(img)
+        _, clase_tm, prob_tm = clf.analizar_frame(img)
 
-    gemini_objeto = "—"
-
-    if prob_tm >= UMBRAL_TM:
+    # Gemini SIEMPRE analiza con el contexto del TM
+    try:
         with contextlib.redirect_stdout(io.StringIO()):
-            atributos = extractor.analizar_imagen_tm(ruta, clf=clf)
-        metodo = "TM"
-    else:
-        try:
-            with contextlib.redirect_stdout(io.StringIO()):
-                atributos = extractor.analizar_imagen(ruta)
-            gemini_objeto = atributos.get("objeto_reconocido", "—")
-            metodo = "Gemini"
-        except Exception as e:
-            with contextlib.redirect_stdout(io.StringIO()):
-                atributos = atributos_tm
-            metodo = "TM-fb"
+            atributos = extractor.analizar_imagen_hibrido(ruta, clase_tm, prob_tm)
+        metodo = "Hibrido"
+    except Exception:
+        # Fallback: TM solo si Gemini falla (sin internet, rate limit, etc.)
+        with contextlib.redirect_stdout(io.StringIO()):
+            atributos, _, _ = clf.analizar_frame(img)
+        metodo = "TM-solo"
 
     engine = InferenceEngine()
     engine.cargar_hechos(atributos)
-    conclusion, confianza, reglas = engine.ejecutar()
+    conclusion, confianza, _ = engine.ejecutar()
 
+    gemini_objeto = atributos.get("objeto_reconocido", "—")
     return conclusion, confianza, metodo, prob_tm, gemini_objeto, atributos
 
 
@@ -93,15 +89,17 @@ def ejecutar_pruebas():
         gemini_ok = False
 
     print("\n" + "█" * 72)
-    print("  RECI — PRUEBA COMPLETA TM + GEMINI")
-    print(f"  Umbral TM: {UMBRAL_TM:.0%}  |  Imágenes: {len(IMAGENES)}  |  "
+    print("  RECI — PRUEBA COMPLETA  FLUJO HÍBRIDO TM + GEMINI + SE")
+    print(f"  Imágenes: {len(IMAGENES)}  |  "
           f"Gemini: {'✅ disponible' if gemini_ok else '❌ no disponible'}")
+    print(f"  Flujo: TM (contexto) → Gemini (análisis) → Sistema Experto (decisión)")
     print("█" * 72)
 
     aprobados      = 0
     fallidos       = 0
     con_gemini     = 0
     fallidos_lista = []
+    tiempos        = []
 
     for ruta, descripcion, esperado in IMAGENES:
         nombre = os.path.basename(ruta)
@@ -113,8 +111,11 @@ def ejecutar_pruebas():
             print(f"  ⚠ Archivo no encontrado: {ruta}")
             continue
 
+        t_inicio = time.time()
         conclusion, confianza, metodo, prob_tm, gemini_obj, atributos = \
             clasificar_imagen(ruta, clf, extractor)
+        t_total = time.time() - t_inicio
+        tiempos.append(t_total)
 
         aprobado = conclusion == esperado
         estado   = "✅ PASS" if aprobado else "❌ FAIL"
@@ -124,45 +125,56 @@ def ejecutar_pruebas():
         else:
             fallidos += 1
             fallidos_lista.append((nombre, descripcion, esperado, conclusion,
-                                   metodo, prob_tm, atributos))
-        if metodo == "Gemini":
+                                   metodo, prob_tm, atributos, t_total))
+        if metodo == "Hibrido":
             con_gemini += 1
 
         # Detalle del análisis
-        print(f"  TM detectó     : {atributos.get('objeto_reconocido','?')} "
-              f"(confianza TM: {prob_tm:.1%})")
+        print(f"  TM contexto    : {atributos.get('objeto_reconocido','?')} "
+              f"(TM prob: {prob_tm:.1%})")
 
-        if metodo == "Gemini":
-            print(f"  Gemini detectó : {gemini_obj}  ← TM confianza baja, Gemini confirmó")
-        elif metodo == "TM-fb":
-            print(f"  Gemini         : ❌ falló, se usó TM como fallback")
+        if metodo == "Hibrido":
+            print(f"  Gemini detectó : {gemini_obj}")
+        elif metodo == "TM-solo":
+            print(f"  Gemini         : ❌ falló — se usó TM como fallback")
 
-        print(f"  Método usado   : {metodo}")
-        print(f"  Objeto reconocido → {atributos.get('objeto_reconocido','?')} | "
+        print(f"  Objeto → {atributos.get('objeto_reconocido','?')} | "
               f"Confianza ML → {atributos.get('confianza_ml','?')}")
         print(f"  Resultado SE   : {conclusion} ({confianza*100:.1f}%)")
         print(f"  Esperado       : {esperado}")
+        print(f"  ⏱  Tiempo      : {t_total:.2f}s")
         print(f"  {estado}  {'✓ Correcto' if aprobado else '✗ Error — revisar'}")
 
     # ── Resumen final ─────────────────────────────────────────
     total = aprobados + fallidos
     pct   = aprobados / total * 100 if total > 0 else 0
 
+    t_promedio = sum(tiempos) / len(tiempos) if tiempos else 0
+    t_min      = min(tiempos) if tiempos else 0
+    t_max      = max(tiempos) if tiempos else 0
+    t_total_g  = sum(tiempos)
+
     print(f"\n{'█'*72}")
     print(f"  RESULTADOS FINALES")
     print(f"{'─'*72}")
-    print(f"  Total     : {aprobados}/{total} ({pct:.1f}%)")
-    print(f"  Solo TM   : {total - con_gemini} imágenes")
-    print(f"  Con Gemini: {con_gemini} imágenes")
+    print(f"  Precisión     : {aprobados}/{total} ({pct:.1f}%)")
+    print(f"  Híbrido TM+Gemini : {con_gemini} imágenes")
+    print(f"  Solo TM (fallback): {total - con_gemini} imágenes")
+    print(f"{'─'*72}")
+    print(f"  ⏱  TIEMPOS")
+    print(f"  Promedio  : {t_promedio:.2f}s por imagen")
+    print(f"  Mínimo    : {t_min:.2f}s")
+    print(f"  Máximo    : {t_max:.2f}s")
+    print(f"  Total     : {t_total_g:.1f}s ({len(tiempos)} imágenes)")
 
     if fallidos_lista:
         print(f"\n  ❌ FALLIDOS ({len(fallidos_lista)}):")
         print(f"  {'─'*68}")
-        for nombre, desc, esp, obt, met, prob, atrib in fallidos_lista:
+        for nombre, desc, esp, obt, met, prob, atrib, t in fallidos_lista:
             print(f"  • {nombre} — {desc}")
             print(f"    Esperado : {esp}")
             print(f"    Obtenido : {obt}")
-            print(f"    Método   : {met} (TM prob: {prob:.1%})")
+            print(f"    Método   : {met} (TM prob: {prob:.1%})  ⏱ {t:.2f}s")
             print(f"    Obj. rec.: {atrib.get('objeto_reconocido','?')} | "
                   f"Conf ML: {atrib.get('confianza_ml','?')}")
 

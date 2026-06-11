@@ -68,9 +68,9 @@ class Camera:
         print("  3. Espera el resultado")
         print("  ─────────────────────────────────────────")
         if tm_classifier:
-            print("  🤖 TM activo — respuesta rápida cuando confianza >= 95%")
+            print("  🤖 Flujo híbrido: TM (contexto) → Gemini (análisis) → SE (decisión)")
         else:
-            print("  🔮 Modo Gemini — sin modelo TM disponible")
+            print("  🔮 Modo Gemini puro — sin modelo TM disponible")
         print("  P/V: Corregir resultado  |  Q: Salir\n")
 
         PREVIEW    = "preview"
@@ -340,28 +340,16 @@ class Camera:
 
     def _analizar(self, extractor, ruta, tm_classifier=None):
         """
-        Flujo híbrido TM + Gemini:
-        - TM >= 95% → resultado inmediato
-        - TM <  95% → Gemini confirma (puede retornar tacho general)
+        Flujo híbrido TM + Gemini + Sistema Experto:
+        - TM corre siempre como contexto inicial
+        - Gemini analiza siempre la imagen visualmente
+        - El sistema experto toma la decisión final
+
+        Si Gemini falla (sin internet, rate limit), se usa TM solo como fallback.
         """
         try:
-            resultado = None
-
-            if tm_classifier:
-                img = cv2.imread(ruta)
-                atributos_tm, clase_tm, prob_tm = tm_classifier.analizar_frame(img)
-
-                print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%})")
-
-                if prob_tm >= 0.95:
-                    print(f"  ✅ Confianza alta — TM directo")
-                    resultado = extractor.analizar_y_clasificar_tm(
-                        ruta, clf=tm_classifier)
-                else:
-                    print(f"  ⚠ Confianza {prob_tm:.1%} < 95% — Gemini confirma...")
-                    resultado = extractor.analizar_y_clasificar(ruta)
-            else:
-                resultado = extractor.analizar_y_clasificar(ruta)
+            resultado = extractor.analizar_y_clasificar_hibrido(
+                ruta, clf=tm_classifier)
 
             conclusion = resultado["conclusion"]
             hardware   = resultado["hardware"]
@@ -376,6 +364,13 @@ class Camera:
         except Exception as e:
             if "429" in str(e):
                 print("  ⚠ Rate limit Gemini — espera unos segundos")
+                print("  🔄 Fallback: usando TM solo...")
+                try:
+                    resultado = extractor.analizar_y_clasificar_tm(
+                        ruta, clf=tm_classifier)
+                    return resultado
+                except Exception:
+                    pass
             else:
                 print(f"  ❌ Error: {e}")
             return None

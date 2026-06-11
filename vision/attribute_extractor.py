@@ -1,6 +1,14 @@
 # vision/attribute_extractor.py
-# Extractor de atributos visuales usando Google Gemini (actual) o Teachable Machine (producción)
+# Extractor de atributos visuales — flujo híbrido TM + Gemini
 # Módulo de visión del sistema experto RECI
+#
+# FLUJO PRINCIPAL (analizar_y_clasificar_hibrido):
+#   1. TM corre primero (~0.1s) → da su voto como contexto
+#   2. Gemini SIEMPRE analiza la imagen (~2s) con ese contexto
+#   3. Sistema experto toma la decisión final
+#
+# Esto permite que Gemini corrija errores del TM (papel → PLASTICO, etc.)
+# sin perder la velocidad del TM como guía inicial.
 
 import os
 import json
@@ -11,13 +19,12 @@ from pathlib import Path
 
 class AttributeExtractor:
     """
-    Extrae atributos visuales de una imagen usando Google Gemini.
-    Convierte una imagen en el diccionario de atributos que
-    necesita el motor de inferencia del sistema experto RECI.
+    Extrae atributos visuales de una imagen.
 
-    Cuando el equipo ML entregue el modelo Teachable Machine,
-    usar analizar_imagen_tm() en lugar de analizar_imagen().
-    El resto del sistema no cambia.
+    Flujo recomendado: analizar_y_clasificar_hibrido(ruta, clf=tm_classifier)
+    - TM actúa como contexto inicial para Gemini
+    - Gemini siempre hace el análisis visual definitivo
+    - El sistema experto decide con los 9 atributos de Gemini
     """
 
     GEMINI_URL = (
@@ -25,7 +32,7 @@ class AttributeExtractor:
         "/gemini-2.5-flash:generateContent"
     )
 
-    PROMPT = """Eres el módulo de visión del sistema experto RECI, un tacho inteligente de reciclaje universitario en Ecuador.
+    PROMPT_BASE = """Eres el módulo de visión del sistema experto RECI, un tacho inteligente de reciclaje universitario en Ecuador.
 
 Tu tarea es analizar la imagen y extraer exactamente estos atributos visuales del objeto principal:
 
@@ -33,7 +40,7 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 
 - objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | botella_fioravanti | botella_aceite_plastico | botella_jugo_plastico | tetra_pak | botella_pony_malta | botella_enjuague_bucal | botella_cola_gallito | botella_gatorade | desconocido
 
-  Guía rápida de los nuevos valores:
+  Guía rápida:
   - botella_fioravanti: gaseosa ecuatoriana, botella PET oscura naranja/marrón con etiqueta de gallo
   - botella_aceite_plastico: botella de aceite de cocina (Alesol, El Cocinero), plástico semitransparente amarillento, forma ancha
   - botella_jugo_plastico: jugo en plástico (Pulp, Tampico, Frugos), etiqueta colorida, opaca
@@ -42,6 +49,9 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
   - botella_enjuague_bucal: Colgate Plax, Listerine u otro enjuague en plástico
   - botella_cola_gallito: gaseosa ecuatoriana Cola Gallito, PET transparente con etiqueta colorida tipo Coca-Cola
   - botella_gatorade: bebida deportiva Gatorade, PET con boca más ancha que gaseosa estándar
+  - papel_servilleta: hoja de papel, servilleta, papel impreso — NO es plástico ni vidrio
+  - carton: caja de cartón, cartulina — NO es plástico ni vidrio
+  - lata: envase metálico de aluminio — NO va en ningún compartimento de RECI
 
 - confianza_ml: alta | media | baja
 
@@ -61,7 +71,8 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 
 REGLAS DE ANÁLISIS:
 - Analiza SOLO el objeto principal de la imagen
-- Si no puedes determinar un atributo con certeza, usa el valor más cercano
+- Confía en lo que VES — material, brillo, transparencia, forma de la tapa
+- Si el objeto NO es plástico ni vidrio (papel, cartón, lata, orgánico), usa el objeto_reconocido correcto y confianza_ml = baja
 - confianza_ml refleja qué tan seguro estás de tu análisis general
 - Si el objeto no está claro o es muy ambiguo, usa confianza_ml = baja y objeto_reconocido = desconocido
 
@@ -77,6 +88,9 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
   "textura": "...",
   "rigidez": "..."
 }"""
+
+    # Mantener PROMPT como alias para compatibilidad con código existente
+    PROMPT = PROMPT_BASE
 
     def __init__(self):
         from dotenv import load_dotenv
@@ -182,6 +196,145 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             print(f"  ⚠ Modelo TM no disponible, usando Gemini como fallback...")
             print(f"  ⚠ Detalle: {e}")
             return self.analizar_imagen(ruta_imagen)
+
+    def analizar_imagen_hibrido(self, ruta_imagen: str,
+                                clase_tm: str = None,
+                                prob_tm: float = None) -> dict:
+        """
+        Flujo híbrido: Gemini SIEMPRE analiza la imagen.
+        Si se pasa el resultado del TM, lo incluye como contexto en el prompt.
+
+        clase_tm : etiqueta que devolvió TM  (ej: "plastico", "vidrio")
+        prob_tm  : probabilidad de TM        (ej: 0.994)
+
+        TM actúa solo como referencia — Gemini hace el análisis visual final.
+        Si Gemini ve algo diferente a lo que TM dijo, prevalece Gemini.
+        """
+        print(f"  🔍 Gemini analizando (flujo híbrido): {ruta_imagen}")
+
+        imagen_b64, mime_type = self._imagen_a_base64(ruta_imagen)
+
+        # Insertar contexto del TM en el prompt si está disponible
+        if clase_tm and prob_tm is not None:
+            contexto_tm = (
+                f"\nCONTEXTO DEL CLASIFICADOR RÁPIDO (MobileNetV2):\n"
+                f"El modelo detectó '{clase_tm}' con {prob_tm:.0%} de confianza.\n"
+                f"Úsalo como referencia inicial, pero confía en tu análisis visual "
+                f"si ves algo diferente — especialmente en material, brillo de tapa y textura.\n"
+            )
+            prompt = self.PROMPT_BASE.replace(
+                "REGLAS DE ANÁLISIS:",
+                contexto_tm + "\nREGLAS DE ANÁLISIS:"
+            )
+        else:
+            prompt = self.PROMPT_BASE
+
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data":      imagen_b64
+                        }
+                    }
+                ]
+            }],
+            "generationConfig": {
+                "temperature":     0.1,
+                "topP":            0.8,
+                "maxOutputTokens": 2048
+            }
+        }
+
+        url      = f"{self.GEMINI_URL}?key={self.api_key}"
+        response = httpx.post(url, json=payload, timeout=60.0)
+        response.raise_for_status()
+        data     = response.json()
+
+        texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+        # Limpiar markdown si Gemini lo agrega
+        if "```" in texto:
+            for parte in texto.split("```"):
+                if "{" in parte:
+                    texto = parte.lstrip("json").strip()
+                    break
+
+        inicio = texto.find("{")
+        fin    = texto.rfind("}") + 1
+        if inicio != -1 and fin > inicio:
+            texto = texto[inicio:fin]
+
+        atributos = json.loads(texto.strip())
+        print(f"  ✅ Gemini → {atributos.get('objeto_reconocido')} "
+              f"(confianza: {atributos.get('confianza_ml')})")
+        return atributos
+
+    def analizar_y_clasificar_hibrido(self, ruta_imagen: str, clf=None) -> dict:
+        """
+        FLUJO PRINCIPAL DE RECI.
+
+        Pasos:
+        1. TM corre (~0.1s) si clf está disponible → da contexto a Gemini
+        2. Gemini analiza siempre (~2s) → extrae los 9 atributos visuales
+        3. Sistema experto decide con esos atributos
+
+        Ventaja: Gemini puede corregir errores del TM
+        (papel clasificado como plástico, Gatorade vidrio, etc.)
+        y también detectar objetos que no son ni plástico ni vidrio.
+
+        clf: instancia de TeachableMachineClassifier ya cargada (opcional)
+        """
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+        from expert_system.inference_engine import InferenceEngine
+        from expert_system.explanation import ExplanationReport
+
+        # ── Paso 1: TM como contexto ───────────────────────────────────
+        clase_tm = None
+        prob_tm  = None
+
+        if clf is not None:
+            try:
+                import cv2
+                img = cv2.imread(ruta_imagen)
+                if img is not None:
+                    _, clase_tm, prob_tm = clf.analizar_frame(img)
+                    print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%}) — pasa a Gemini como contexto")
+            except Exception as e:
+                print(f"  ⚠ TM falló ({e}), Gemini continúa sin contexto")
+
+        # ── Paso 2: Gemini analiza siempre ────────────────────────────
+        atributos = self.analizar_imagen_hibrido(ruta_imagen, clase_tm, prob_tm)
+
+        # ── Paso 3: Sistema experto decide ────────────────────────────
+        engine = InferenceEngine()
+        engine.cargar_hechos(atributos)
+        conclusion, confianza, reglas = engine.ejecutar()
+
+        reporte  = ExplanationReport(engine)
+
+        print(engine.obtener_explicacion())
+        decision = engine.decision_hardware()
+        print(f"\n  ACCIÓN HARDWARE:")
+        print(f"    Compuerta : {decision['compuerta']}")
+        print(f"    LED       : {decision['led']}")
+        print(f"    Servo     : {decision['angulo_servo']}°")
+        print(f"    Mensaje   : {decision['mensaje']}")
+
+        return {
+            "atributos":  atributos,
+            "conclusion": conclusion,
+            "confianza":  confianza,
+            "hardware":   decision,
+            "reporte":    reporte.a_dict(),
+            "tm_clase":   clase_tm,
+            "tm_prob":    prob_tm,
+        }
 
     def analizar_y_clasificar(self, ruta_imagen: str) -> dict:
         """
