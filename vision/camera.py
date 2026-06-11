@@ -26,6 +26,20 @@ class Camera:
             raise RuntimeError(f"No se pudo abrir la cámara {self.camara_index}.")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+        # En macOS, isOpened() puede ser True aunque el SO bloquee el acceso
+        # por permisos: el primer read() devuelve ret=False. Detectarlo aquí
+        # evita que el bucle de modo_demo termine en silencio.
+        ret, _ = self.cap.read()
+        if not ret:
+            self.cap.release()
+            self.cap = None
+            raise RuntimeError(
+                "La cámara se abrió pero no entrega imágenes (ret=False).\n"
+                "  → En macOS, ve a Ajustes del Sistema → Privacidad y Seguridad → Cámara\n"
+                "    y habilita el permiso para tu Terminal/IDE. Luego reinicia la Terminal."
+            )
+
         print("  📷 Cámara iniciada correctamente")
 
     def capturar_foto(self, nombre=None):
@@ -423,5 +437,7 @@ if __name__ == "__main__":
         )
     except KeyboardInterrupt:
         print("\n  Interrumpido por el usuario")
+    except RuntimeError as e:
+        print(f"\n  ❌ {e}")
     finally:
         camara.detener()
