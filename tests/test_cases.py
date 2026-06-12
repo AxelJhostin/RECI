@@ -13,6 +13,7 @@ from tests.casos.casos_plastico import CASOS_PLASTICO
 from tests.casos.casos_ambiguos import CASOS_AMBIGUOS
 from tests.casos.casos_extremos import CASOS_EXTREMOS
 from tests.casos.casos_campus   import CASOS_CAMPUS
+from tests.casos.casos_lata     import CASOS_LATA
 
 # ─────────────────────────────────────────────
 # Lista completa — orden de ejecución
@@ -23,7 +24,8 @@ CASOS_DE_PRUEBA = (
     CASOS_PLASTICO +
     CASOS_AMBIGUOS +
     CASOS_EXTREMOS +
-    CASOS_CAMPUS
+    CASOS_CAMPUS +
+    CASOS_LATA
 )
 
 

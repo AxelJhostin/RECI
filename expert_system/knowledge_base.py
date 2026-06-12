@@ -168,7 +168,7 @@ class KnowledgeBase:
 
             # LATA — señal muy fuerte
             Rule("R50", {"brillo": "metalico",       "forma": "cilindrica_delgada"},                          "LATA",     0.99, "Brillo metálico en cilindro → lata de aluminio (Red Bull, atún, etc.)"),
-            Rule("R51", {"color": "metalico"},                                                                 "LATA",     0.97, "Color metálico → lata de aluminio"),
+            Rule("R51", {"color": "metalico", "brillo": "metalico"},                                          "LATA",     0.97, "Color y brillo metálicos → lata de aluminio (color metálico solo no basta: una etiqueta plástica también puede ser metálica)"),
         ]
 
         # ── NIVEL 3: Desempate — casos ambiguos ─────────────────────────

@@ -134,14 +134,16 @@ RECI/
 │   └── app.py                  # FastAPI — 8 endpoints REST, motor de inferencia compartido
 │
 ├── tests/
-│   ├── test_cases.py           # Runner principal — 67 pruebas formales
+│   ├── test_cases.py             # Runner principal — 74 pruebas formales
+│   ├── test_backward_chaining.py # Pruebas dedicadas a los goals de backward chaining
 │   └── casos/
 │       ├── __init__.py
 │       ├── casos_vidrio.py     # 9 casos de vidrio
 │       ├── casos_plastico.py   # 18 casos de plástico
 │       ├── casos_ambiguos.py   # 10 casos difíciles (PET vs vidrio)
 │       ├── casos_extremos.py   # 4 casos extremos (baja confianza, desconocidos)
-│       └── casos_campus.py     # 26 casos con objetos reales del campus PUCE Manabí
+│       ├── casos_campus.py     # 26 casos con objetos reales del campus PUCE Manabí
+│       └── casos_lata.py       # 7 casos de LATA y bordes con vidrio/plástico
 │
 ├── model/                      # Modelo entrenado — NO está en el repo (ver instalación)
 │   ├── model.tflite            # MobileNetV2 entrenado (99.7% precisión) — descargar aparte
@@ -234,7 +236,7 @@ Si no hay `model/model.tflite`, el sistema detecta su ausencia y usa Gemini auto
 ```bash
 # Verificar sistema experto (sin hardware, sin internet)
 python3 tests/test_cases.py
-# Resultado esperado: 67/67 pruebas aprobadas (100%)
+# Resultado esperado: 74/74 pruebas aprobadas (100%)
 
 # Verificar API REST
 uvicorn api.app:app --reload --port 8000
@@ -429,13 +431,15 @@ El backward chaining se ejecuta **después** del forward chaining como verificac
 
 Cada categoría tiene un `Goal` con condiciones ponderadas:
 
+**Condiciones eliminatorias:** algunas condiciones representan hechos "siempre/nunca" que no admiten excepción (ej. "una botella de vidrio siempre tiene tapa metálica"). Si una condición marcada `eliminatoria=True` falla, esa categoría queda **descartada por completo**, sin importar qué tan alto sea el score ponderado. Esto evita que una categoría "gane por puntaje" cuando le falta su rasgo más determinante.
+
 **GOAL VIDRIO** (umbral: 60% de peso cumplido)
 
 | Condición | Peso | Valores aceptados |
 |---|---|---|
 | rigidez | 1.00 | `rigido` |
 | brillo | 0.95 | `alto_nitido` |
-| tapa | 0.90 | `corona_metalica` `twist_off_metalica` `tapa_ancha_metalica` |
+| tapa **[ELIMINATORIA]** | 0.90 | `corona_metalica` `twist_off_metalica` `tapa_ancha_metalica` |
 | textura | 0.80 | `lisa_brillante` |
 | color | 0.75 | `ambar` `verde_oscuro` `transparente` `variado_vivo` |
 | forma | 0.70 | `cilindrica_estandar` `cilindrica_ancha` `cilindrica_delgada` |
@@ -459,11 +463,22 @@ Cada categoría tiene un `Goal` con condiciones ponderadas:
 | forma | 0.90 | `irregular` `rectangular_plana` |
 | textura | 0.90 | `rugosa` `fibrosa` `lisa_sin_brillo` |
 | brillo | 0.85 | `bajo` |
-| rigidez | 0.75 | `flexible` `indefinido` `rigido` |
 | color | 0.65 | `marron_tierra` `variado_vivo` `blanco_opaco` |
 | transparencia | 0.60 | `ninguna` `baja` |
 
-Si backward chaining contradice al forward chaining con score > 80%, el sistema genera una advertencia (no bloquea la decisión pero queda en el log).
+**GOAL LATA** (umbral: 70%)
+
+| Condición | Peso | Valores aceptados |
+|---|---|---|
+| brillo **[ELIMINATORIA]** | 1.00 | `metalico` |
+| color | 0.95 | `metalico` |
+| rigidez | 0.85 | `rigido` |
+| transparencia | 0.80 | `ninguna` |
+| forma | 0.75 | `cilindrica_estandar` `cilindrica_delgada` |
+
+LATA no tiene compuerta propia (va a tacho general junto con ORGÁNICO y DESCONOCIDO), pero su goal sí se evalúa: el riesgo real es que una regla de LATA le **robe** un caso a VIDRIO o PLASTICO, que sí tienen compuerta dedicada. Por eso "brillo metálico" — su rasgo más distintivo — es eliminatorio: sin él, LATA queda descartada aunque el resto del puntaje supere el umbral.
+
+Si backward chaining contradice al forward chaining con score > 80%, el sistema genera una advertencia (no bloquea la decisión pero queda en el log). LATA está excluida de esta verificación de consistencia (junto con DESCONOCIDO), ya que no tiene compuerta propia.
 
 ---
 
@@ -753,7 +768,7 @@ Latas de aluminio (Red Bull, Monster lata, Coca-Cola lata, atún), **Tetra Pak**
 python3 tests/test_cases.py
 ```
 
-**Resultado actual: 67/67 pruebas aprobadas (100%)**
+**Resultado actual: 74/74 pruebas aprobadas (100%)**
 
 | Categoría | Resultado | Objetos cubiertos |
 |---|---|---|
@@ -764,8 +779,15 @@ python3 tests/test_cases.py
 | CAMPUS_PLASTICO | 17/17 (100%) | Powerade, Dasani, Chocolatada, Colgate Plax, Speed Max, **Gatorade**, **Cola Gallito**, **Fioravanti** |
 | CAMPUS_VIDRIO | 7/7 (100%) | Mocachino campus, Pilsener campus, **Pony Malta** |
 | CAMPUS_ORGANICO | 2/2 (100%) | **Tetra Pak Del Valle**, Tetra Pak por atributos visuales |
+| LATA | 7/7 (100%) | Lata de aluminio (ML y por atributos), lata aplastada, lata ancha (atún), y bordes con VIDRIO/PLASTICO ante color/brillo metálico |
 
 Para agregar nuevos casos de prueba: editar el archivo correspondiente en `tests/casos/` sin tocar `test_cases.py`.
+
+Además, `tests/test_backward_chaining.py` valida directamente los goals de `BackwardChainingEngine` (6/6 casos), incluyendo las condiciones eliminatorias de VIDRIO y LATA:
+
+```bash
+python3 tests/test_backward_chaining.py
+```
 
 ---
 
@@ -857,7 +879,7 @@ uvicorn api.app:app --reload --port 8000
 | Meta-conocimiento | `MetaRuleEngine` — 12 meta-reglas que controlan el razonamiento |
 | Diseño e implementación de SE | Todo el módulo `expert_system/` — 9 componentes independientes |
 | Evaluación ética | `ExplanationReport` — trazabilidad completa de cada decisión con reglas y CFs |
-| Validación del SE | 67 pruebas formales organizadas por categoría con 100% de aprobación |
+| Validación del SE | 74 pruebas formales organizadas por categoría + 6 pruebas de backward chaining, 100% de aprobación |
 
 ---
 
@@ -884,7 +906,9 @@ uvicorn api.app:app --reload --port 8000
 - Sistema experto: **113 reglas**, forward + backward chaining, CF MYCIN, **12 meta-reglas**
 - Productos ecuatorianos: Fioravanti, Cola Gallito, Gatorade, Pony Malta, Tetra Pak, Güitig vidrio, Zhumir, Pulp/Tampico, aceite de cocina, Colgate Plax/Listerine
 - Validador de atributos, estadísticas, reporte técnico JSON
-- **67/67 pruebas formales (100%)** — campus, ambiguos, extremos
+- **74/74 pruebas formales (100%)** — campus, ambiguos, extremos, LATA
+- **Condiciones eliminatorias en backward chaining:** corrigen casos donde VIDRIO o LATA podían "ganar por puntaje" sin cumplir su rasgo más determinante (tapa metálica / brillo metálico). Incluye 6/6 pruebas dedicadas en `tests/test_backward_chaining.py`
+- Regla R51 (LATA) endurecida: ahora requiere color **y** brillo metálicos, evitando que objetos plásticos con etiqueta metálica se clasifiquen como lata al 97%
 - Modelo MobileNetV2 propio (**98.2% precisión**, **21,347 fotos** del campus PUCE Manabí)
 - **Flujo híbrido TM + Gemini rediseñado:** TM siempre da contexto → Gemini siempre analiza visualmente → SE decide. Permite detectar objetos que no son plástico ni vidrio (papel, lata, cartón → tacho general)
 - Cámara en tiempo real con modo demo funcional (3 destinos: compuerta izq, compuerta der, tacho general)
