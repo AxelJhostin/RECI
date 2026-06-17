@@ -152,7 +152,7 @@ RECI/
 │
 ├── images/
 │   ├── capturas/               # Fotos capturadas por la cámara en tiempo real
-│   ├── api_uploads/            # Fotos subidas por la API REST
+│   ├── api_uploads/            # Fotos subidas por la API REST (gitignoreado — solo local)
 │   └── prueba1-8.jpeg          # Imágenes de prueba incluidas en el repo
 │
 ├── fotos_dataset/              # Fotos tomadas con tomar_fotos.py — solo local, no en repo
@@ -211,7 +211,7 @@ GEMINI_API_KEY=tu_api_key_aqui
 Obtener API key gratuita en: https://aistudio.google.com/apikey
 
 > Si no tienes API key de Gemini, el sistema funciona igualmente usando solo el modelo TFLite.
-> Gemini únicamente se activa cuando la confianza del modelo es < 90%.
+> Con la API configurada, Gemini **siempre** analiza la imagen visualmente (no solo como fallback) — ver sección [Flujo de visión híbrido](#flujo-de-visión-híbrido).
 
 ### 3. Obtener el modelo entrenado
 
@@ -237,6 +237,10 @@ Si no hay `model/model.tflite`, el sistema detecta su ausencia y usa Gemini auto
 # Verificar sistema experto (sin hardware, sin internet)
 python3 tests/test_cases.py
 # Resultado esperado: 74/74 pruebas aprobadas (100%)
+
+# Verificar goals de backward chaining
+python3 tests/test_backward_chaining.py
+# Resultado esperado: 6/6 pruebas aprobadas (100%)
 
 # Verificar API REST
 uvicorn api.app:app --reload --port 8000
