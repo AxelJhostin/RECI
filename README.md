@@ -249,8 +249,10 @@ uvicorn api.app:app --reload --port 8000
 ## Ejecución
 
 ```bash
-# Modo cámara en tiempo real (presionar ESPACIO para capturar)
+# Modo cámara en tiempo real
 python3 vision/camera.py
+# ESPACIO = capturar y clasificar | P = corregir a PLÁSTICO | V = corregir a VIDRIO | Q = salir
+# Requisito macOS: Ajustes del Sistema → Privacidad y Seguridad → Cámara → activar Terminal
 
 # API REST completa
 uvicorn api.app:app --reload --port 8000
@@ -572,11 +574,38 @@ Esto permite que el sistema experto produzca `DESCONOCIDO` (tacho general) para 
 
 **Fallback automático si Gemini no está disponible:**
 
-Si Gemini falla (sin internet, rate limit, error de red), el sistema cae automáticamente al resultado del TM. El robot sigue funcionando, con menor precisión en casos ambiguos.
+Si Gemini falla (429 rate limit, 503 servicio caído, timeout u otro error de red), el sistema cae automáticamente al resultado del TM sin interrumpir la clasificación ni mostrar pantallas de error. Hay dos capas de protección:
+
+1. **Dentro de `analizar_y_clasificar_hibrido()`** — cubre cualquier llamador: cámara, API y tests de imágenes.
+2. **Dentro de `camera.py._analizar()`** — segunda línea de defensa específica para el modo demo.
 
 **Tiempo total por clasificación:**
-- Flujo híbrido TM + Gemini: ~2–2.5 seg
+- Flujo híbrido TM + Gemini: ~2–5 seg
 - Fallback solo TM: ~0.1 seg
+
+### Modo demo — cámara en tiempo real
+
+La ventana de cámara tiene 4 estados secuenciales:
+
+| Estado | Lo que ocurre |
+|---|---|
+| **PREVIEW** | Cámara en vivo — colocar el objeto frente a la cámara |
+| **COUNTDOWN** | Cuenta regresiva de 1 segundo — mantener el objeto quieto |
+| **ANALIZANDO** | Pantalla oscura con animación "Analizando imagen..." — TM + Gemini procesando |
+| **RESULTADO** | Clasificación mostrada 5 segundos con destino, confianza y barra de color |
+
+**Controles:**
+- `ESPACIO` — capturar y clasificar (funciona en PREVIEW o en RESULTADO para siguiente objeto)
+- `P` — corregir manualmente a PLÁSTICO si el sistema se equivocó
+- `V` — corregir manualmente a VIDRIO si el sistema se equivocó
+- `Q` — salir del modo demo
+
+**Destinos en pantalla:**
+- `VIDRIO` → texto naranja, indica compuerta izquierda
+- `PLASTICO` → texto verde, indica compuerta derecha
+- `LATA` / `ORGANICO` / `DESCONOCIDO` → texto rojo, indica tacho general (corregible con P o V)
+
+> En producción el sensor ultrasónico de la Raspberry Pi reemplaza el `ESPACIO`: detecta automáticamente cuando hay un objeto frente a la cámara y dispara la captura.
 
 ---
 
@@ -812,10 +841,18 @@ pip3 install tensorflow
 ```
 OpenCV: not authorized to capture video (status 0)
 ```
+o bien (macOS bloquea silenciosamente y el sistema lo detecta):
+```
+❌ La cámara se abrió pero no entrega imágenes (ret=False).
+  → En macOS, ve a Ajustes del Sistema → Privacidad y Seguridad → Cámara
+    y habilita el permiso para tu Terminal/IDE. Luego reinicia la Terminal.
+```
 **Solución:**
 ```
-Ajustes del Sistema → Privacidad y Seguridad → Cámara → Activar Terminal
+Ajustes del Sistema → Privacidad y Seguridad → Cámara → Activar Terminal (o IDE)
+Cerrar y reabrir la Terminal completamente.
 ```
+El sistema detecta automáticamente el fallo silencioso de macOS donde `isOpened()` devuelve `True` pero `read()` falla, y muestra un mensaje claro con instrucciones.
 
 ### Cámara no abre en Raspberry Pi
 ```
@@ -833,21 +870,17 @@ for i in range(3):
 ```
 En la Raspberry Pi Camera Module usar `cv2.VideoCapture(0)` con el driver V4L2 activado.
 
-### Gemini da error 503
-```
-Server error '503 Service Unavailable'
-```
-**Solución:** Servidor de Google temporalmente caído. Esperar unos minutos. El sistema usa TFLite mientras tanto.
+### Gemini da error 503 / 429 / timeout
 
-### Gemini da error 429
-```
-429 Too Many Requests
-```
-**Solución:** Rate limit de la API gratuita alcanzado. Hay dos tipos:
-- **Rate limit por minuto:** esperar 60 segundos y reintentar
-- **Cupo diario agotado:** esperar hasta las 00:00 UTC para que se resetee
+| Error | Causa |
+|---|---|
+| `429 Too Many Requests` | Rate limit por minuto (esperar 60s) o cupo diario agotado (esperar 00:00 UTC) |
+| `503 Service Unavailable` | Servidor de Google temporalmente caído |
+| `ReadTimeout` | La respuesta tardó más de 60 segundos |
 
-El sistema cae automáticamente al fallback TM mientras Gemini no esté disponible. En producción, considerar una API key de pago (Gemini o Claude API).
+**El sistema maneja todos estos errores automáticamente** — cae al modo TM-solo sin mostrar ningún error al usuario ni interrumpir la clasificación. La cámara y la API siguen funcionando con normalidad, con menor precisión en objetos ambiguos.
+
+La API gratuita de Gemini 2.5 Flash tiene ~250 requests/día. Si se hacen muchas pruebas seguidas (ej. 16 imágenes × varias sesiones), el cupo puede agotarse. Para uso intensivo, considerar una API key de pago (Gemini o Claude API).
 
 ### Las pruebas fallan después de cambiar reglas
 ```bash
@@ -911,7 +944,7 @@ uvicorn api.app:app --reload --port 8000
 - Regla R51 (LATA) endurecida: ahora requiere color **y** brillo metálicos, evitando que objetos plásticos con etiqueta metálica se clasifiquen como lata al 97%
 - Modelo MobileNetV2 propio (**98.2% precisión**, **21,347 fotos** del campus PUCE Manabí)
 - **Flujo híbrido TM + Gemini rediseñado:** TM siempre da contexto → Gemini siempre analiza visualmente → SE decide. Permite detectar objetos que no son plástico ni vidrio (papel, lata, cartón → tacho general)
-- Cámara en tiempo real con modo demo funcional (3 destinos: compuerta izq, compuerta der, tacho general)
+- Cámara en tiempo real con modo demo funcional (3 destinos: compuerta izq, compuerta der, tacho general) — pantalla "Analizando imagen..." visible durante el análisis, manejo robusto de todos los errores de Gemini (429, 503, timeout) sin mostrar pantallas de error
 - Corrección manual en pantalla con teclas P/V disponible en todo momento
 - API REST optimizada (motor compartido — **4x más rápido** en Raspberry Pi)
 - Prompts de Gemini actualizados con guía explícita de objetos no permitidos (papel, lata, cartón)
@@ -921,7 +954,7 @@ uvicorn api.app:app --reload --port 8000
 
 ### En progreso 🔄
 
-- Pruebas de imágenes reales con flujo híbrido completo (actualmente 13/16 — 3 fallos por cupo diario de Gemini y un caso de ambigüedad visual)
+- Pruebas de imágenes reales con flujo híbrido completo: 13/16 con Gemini disponible (2 fallos por TM sin clase de vidrio Gatorade, 1 fallo por ambigüedad visual papel/vaso) — mejorable reentrenando el modelo con más variedad de botellas de vidrio y vasos plásticos oscuros
 - Integración con hardware físico
 
 ### Pendiente ⏳
