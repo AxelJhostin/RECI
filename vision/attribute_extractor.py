@@ -308,8 +308,20 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             except Exception as e:
                 print(f"  ⚠ TM falló ({e}), Gemini continúa sin contexto")
 
-        # ── Paso 2: Gemini analiza siempre ────────────────────────────
-        atributos = self.analizar_imagen_hibrido(ruta_imagen, clase_tm, prob_tm)
+        # ── Paso 2: Gemini analiza siempre (fallback a TM si falla) ─────
+        try:
+            atributos = self.analizar_imagen_hibrido(ruta_imagen, clase_tm, prob_tm)
+        except Exception as e:
+            print(f"  ⚠ Gemini no disponible ({e.__class__.__name__}) — usando TM como fallback")
+            if clf is None:
+                try:
+                    from vision.tm_classifier import TeachableMachineClassifier
+                    clf = TeachableMachineClassifier()
+                except Exception as e2:
+                    raise RuntimeError(
+                        "Gemini falló y TM no está disponible — sin clasificación posible"
+                    ) from e
+            atributos = clf.analizar_imagen(ruta_imagen)
 
         # ── Paso 3: Sistema experto decide ────────────────────────────
         engine = InferenceEngine()

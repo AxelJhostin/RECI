@@ -97,6 +97,7 @@ class Camera:
         ultimo_resultado = None
         tiempo_resultado = None
         frame_capturado  = None
+        ruta_analisis    = None
         progreso_texto   = ["Analizando imagen   ",
                             "Analizando imagen.  ",
                             "Analizando imagen.. ",
@@ -145,18 +146,13 @@ class Camera:
                                (255, 255, 0), 2)
                 else:
                     frame_capturado = frame.copy()
-                    ruta = self.capturar_foto()
-                    estado = ANALIZANDO
+                    ruta_analisis   = self.capturar_foto()
+                    estado          = ANALIZANDO
                     progreso_idx    = 0
                     tiempo_progreso = ahora
-
-                    if extractor:
-                        print("\n  🔍 Analizando objeto...")
-                        ultimo_resultado = self._analizar(
-                            extractor, ruta, tm_classifier=tm_classifier)
-
-                    estado          = RESULTADO
-                    tiempo_resultado = time.time()
+                    # El análisis corre en la siguiente iteración, DESPUÉS de
+                    # mostrar el frame "Analizando imagen..." — así el usuario
+                    # ve la pantalla de espera antes del bloqueo
 
             # ── ANALIZANDO ────────────────────────────────────────
             elif estado == ANALIZANDO:
@@ -208,6 +204,17 @@ class Camera:
             cv2.imshow("RECI — Sistema de Reciclaje Inteligente", frame)
 
             key = cv2.waitKey(1) & 0xFF
+
+            # ── Análisis: corre después de mostrar "Analizando imagen..." ──
+            if estado == ANALIZANDO and ruta_analisis:
+                if extractor:
+                    print("\n  🔍 Analizando objeto...")
+                    ultimo_resultado = self._analizar(
+                        extractor, ruta_analisis, tm_classifier=tm_classifier)
+                ruta_analisis    = None
+                estado           = RESULTADO
+                tiempo_resultado = time.time()
+
             if key == ord('q') or key == ord('Q'):
                 print("  👋 Saliendo...")
                 break
@@ -376,17 +383,19 @@ class Camera:
             return resultado
 
         except Exception as e:
-            if "429" in str(e):
-                print("  ⚠ Rate limit Gemini — espera unos segundos")
-                print("  🔄 Fallback: usando TM solo...")
-                try:
-                    resultado = extractor.analizar_y_clasificar_tm(
-                        ruta, clf=tm_classifier)
-                    return resultado
-                except Exception:
-                    pass
+            err = str(e).lower()
+            if "429" in err or "quota" in err or "rate" in err:
+                print("  ⚠ Rate limit Gemini — usando TM como fallback")
+            elif "503" in err or "500" in err or "unavailable" in err or "timeout" in err:
+                print("  ⚠ Gemini no disponible — usando TM como fallback")
             else:
-                print(f"  ❌ Error: {e}")
+                print(f"  ⚠ Error en análisis ({e.__class__.__name__}: {e}) — usando TM como fallback")
+            try:
+                resultado = extractor.analizar_y_clasificar_tm(
+                    ruta, clf=tm_classifier)
+                return resultado
+            except Exception as e2:
+                print(f"  ❌ Fallback TM también falló: {e2}")
             return None
 
     def capturar_y_clasificar(self, extractor, tm_classifier=None, delay=2):
