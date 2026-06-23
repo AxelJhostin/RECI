@@ -227,6 +227,64 @@ class MetaRuleEngine:
             })
         ))
 
+        # ── MR13: Objeto blanco opaco + cónico + liso → sesgo fuerte a plástico ──
+        # Patrón visual muy claro de vasos/cubiertos desechables en el campus.
+        # Reduce el umbral necesario cuando los atributos visuales son inequívocos.
+        self.meta_reglas.append(MetaRule(
+            nombre="MR13",
+            prioridad=8,
+            descripcion="Blanco opaco + cónico/irregular + liso brillante + sin tapa → patrón inequívoco de plástico desechable",
+            condicion=lambda hechos, ctx: (
+                hechos.get("color") == "blanco_opaco" and
+                hechos.get("textura") == "lisa_brillante" and
+                hechos.get("rigidez") == "rigido" and
+                hechos.get("tapa") == "sin_tapa"
+            ),
+            accion=lambda hechos, ctx: ctx.update({
+                "sesgo_plastico": ctx.get("sesgo_plastico", 0) + 0.10,
+                "excluir_categorias": ctx.get("excluir_categorias", []) + ["VIDRIO", "LATA"],
+                "nota": "MR13: Blanco opaco liso rígido sin tapa → VIDRIO y LATA excluidos, sesgo fuerte a plástico"
+            })
+        ))
+
+        # ── MR14: Empaque flexible sellado → nunca vidrio ni lata ──────────
+        # Bolsas de snack, fundas — si es flexible y sellado, no puede ser vidrio ni lata.
+        self.meta_reglas.append(MetaRule(
+            nombre="MR14",
+            prioridad=9,
+            descripcion="Objeto flexible y sellado no puede ser vidrio ni lata — siempre plástico u orgánico",
+            condicion=lambda hechos, ctx: (
+                hechos.get("rigidez") == "flexible" and
+                hechos.get("tapa") == "sellado"
+            ),
+            accion=lambda hechos, ctx: ctx.update({
+                "excluir_categorias": ctx.get("excluir_categorias", []) + ["VIDRIO", "LATA"],
+                "sesgo_plastico": ctx.get("sesgo_plastico", 0) + 0.06,
+                "nota": "MR14: Flexible sellado → VIDRIO y LATA excluidos (empaque de snack o funda)"
+            })
+        ))
+
+        # ── MR15: Objeto muy delgado cilíndrico NO metálico → nunca vidrio ───
+        # Pitillos — el vidrio no viene en forma de sorbete.
+        # Condición: no metálico (para no interferir con latas que sí son delgadas).
+        self.meta_reglas.append(MetaRule(
+            nombre="MR15",
+            prioridad=8,
+            descripcion="Cilíndrico delgado rígido sin tapa y NO metálico → nunca vidrio ni lata (es pitillo)",
+            condicion=lambda hechos, ctx: (
+                hechos.get("forma") == "cilindrica_delgada" and
+                hechos.get("tapa") == "sin_tapa" and
+                hechos.get("rigidez") == "rigido" and
+                hechos.get("color") != "metalico" and
+                hechos.get("brillo") != "metalico"
+            ),
+            accion=lambda hechos, ctx: ctx.update({
+                "excluir_categorias": ctx.get("excluir_categorias", []) + ["VIDRIO"],
+                "sesgo_plastico": ctx.get("sesgo_plastico", 0) + 0.05,
+                "nota": "MR15: Cilíndrico delgado no metálico sin tapa → VIDRIO excluido (pitillo o botella delgada)"
+            })
+        ))
+
         # Ordenar por prioridad descendente
         self.meta_reglas.sort(key=lambda mr: mr.prioridad, reverse=True)
 

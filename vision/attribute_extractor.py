@@ -49,7 +49,7 @@ Tu tarea es analizar la imagen y extraer exactamente estos atributos visuales de
 
 ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 
-- objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | botella_fioravanti | botella_aceite_plastico | botella_jugo_plastico | tetra_pak | botella_pony_malta | botella_enjuague_bucal | botella_cola_gallito | botella_gatorade | vaso_plastico_blanco | vaso_vidrio | plato_plastico | recipiente_plastico | desconocido
+- objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | botella_fioravanti | botella_aceite_plastico | botella_jugo_plastico | tetra_pak | botella_pony_malta | botella_enjuague_bucal | botella_cola_gallito | botella_gatorade | vaso_plastico_blanco | vaso_vidrio | plato_plastico | recipiente_plastico | cubierto_plastico | snack_plastico | pitillo | desconocido
 
   Guía rápida:
   - botella_fioravanti: gaseosa ecuatoriana, botella PET oscura naranja/marrón con etiqueta de gallo
@@ -74,6 +74,9 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
   - plato_plastico: blanco opaco, PLANO (rectangular o circular visto desde arriba), rígido
   - papel_servilleta: blanco opaco, PLANO pero FLEXIBLE y fibroso, textura diferente al plástico
   - vaso_vidrio vs vaso_plastico: el vidrio tiene brillo NÍTIDO reflectante; el plástico tiene brillo DIFUSO mate
+  - cubierto_plastico: tenedor, cuchara o cuchillo desechable — blanco opaco o transparente, forma IRREGULAR, rígido; NO confundir con vaso (vaso es cónico) ni plato (plato es plano)
+  - snack_plastico: bolsa de snack (Doritos, chifles, chitos, papas Lay's) — FLEXIBLE, sellado, colores vivos o brillo metálico; distinguir de funda (funda no tiene sellado ni colores de marca)
+  - pitillo: sorbete o pitillo — cilíndrico MUY DELGADO, mucho más estrecho que una botella, transparente o de colores, rígido o semirígido
 
 - confianza_ml: alta | media | baja
 

@@ -278,4 +278,100 @@ CASOS_PLASTICO = [
             "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
         }
     },
+
+    # ── Cubiertos desechables de plástico ─────────────────────────────────
+    {
+        "id": "T63", "nombre": "Tenedor desechable blanco del comedor campus",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "cubierto_plastico", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "irregular", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T64", "nombre": "Cuchara desechable plástica confianza media",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "cubierto_plastico", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "irregular", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T65", "nombre": "Cubierto plástico transparente (solo atributos visuales)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "irregular", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+
+    # ── Empaques de snack ─────────────────────────────────────────────────
+    {
+        "id": "T66", "nombre": "Bolsa Doritos empaque de snack campus",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "snack_plastico", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "irregular", "brillo": "metalico",
+            "tapa": "sellado", "textura": "lisa_brillante", "rigidez": "flexible"
+        }
+    },
+    {
+        "id": "T67", "nombre": "Chifles bolsa de snack flexible sellada",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "snack_plastico", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "irregular", "brillo": "metalico",
+            "tapa": "sellado", "textura": "lisa_brillante", "rigidez": "flexible"
+        }
+    },
+    {
+        "id": "T68", "nombre": "Bolsa de snack solo por atributos visuales",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "irregular", "brillo": "metalico",
+            "tapa": "sellado", "textura": "lisa_brillante", "rigidez": "flexible"
+        }
+    },
+
+    # ── Pitillos / sorbetes ───────────────────────────────────────────────
+    {
+        "id": "T69", "nombre": "Pitillo transparente de cafetería campus",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "pitillo", "confianza_ml": "alta",
+            "transparencia": "media", "color": "transparente",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T70", "nombre": "Pitillo de color (sorbete de bebida fría)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "pitillo", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "cilindrica_delgada", "brillo": "bajo",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T71", "nombre": "Pitillo solo por atributos (cilíndrico muy delgado sin tapa)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "media", "color": "transparente",
+            "forma": "cilindrica_delgada", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
 ]

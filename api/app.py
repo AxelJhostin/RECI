@@ -155,18 +155,20 @@ def raiz():
     """Info general de la API."""
     return {
         "proyecto":    "RECI — Tacho Inteligente de Reciclaje",
-        "version":     "1.0.0",
+        "version":     "2.2.0",
         "sede":        "PUCE Manabí",
         "status":      "activo",
         "modo_vision": MODO_VISION,
         "endpoints": {
-            "POST /clasificar/atributos": "Clasificar con atributos manuales",
-            "POST /clasificar/imagen":    "Clasificar desde imagen (Gemini o TM)",
-            "GET  /estadisticas":         "Estadísticas de la sesión",
-            "GET  /historial":            "Últimas clasificaciones",
-            "POST /reset":                "Resetear estadísticas",
-            "GET  /health":               "Estado del sistema",
-            "GET  /reglas":               "Total de reglas cargadas",
+            "POST /clasificar/atributos":  "Clasificar con atributos manuales",
+            "POST /clasificar/imagen":     "Clasificar desde imagen (Gemini o TM)",
+            "GET  /estadisticas":          "Estadísticas resumen de la sesión",
+            "GET  /estadisticas/detalle":  "Estadísticas detalladas con desglose por objeto",
+            "GET  /estadisticas/objetos":  "Top objetos más frecuentes detectados",
+            "GET  /historial":             "Últimas clasificaciones",
+            "POST /reset":                 "Resetear estadísticas",
+            "GET  /health":                "Estado del sistema",
+            "GET  /reglas":                "Total de reglas cargadas",
         }
     }
 
@@ -381,6 +383,46 @@ def obtener_estadisticas():
             }
             for e in stats.historial[-10:]
         ]
+    }
+
+
+@app.get("/estadisticas/detalle", tags=["Dashboard"])
+def obtener_estadisticas_detalle():
+    """
+    Estadísticas detalladas de la sesión.
+    Incluye desglose por objeto reconocido y confianza promedio por categoría.
+    Ideal para el dashboard de análisis del equipo.
+    """
+    return {
+        "success":   True,
+        "timestamp": datetime.now().isoformat(),
+        "datos":     stats.payload_detalle(),
+        "historial_reciente": [
+            {
+                "timestamp":         e["timestamp"],
+                "clasificacion":     e["conclusion"],
+                "objeto_reconocido": e["objeto_reconocido"],
+                "confianza_pct":     round(e["confianza"] * 100, 1),
+                "reglas_disparadas": e["reglas_disparadas"],
+                "exitosa":           e["exitosa"]
+            }
+            for e in stats.historial[-20:]
+        ]
+    }
+
+
+@app.get("/estadisticas/objetos", tags=["Dashboard"])
+def obtener_estadisticas_objetos(top: int = 10):
+    """
+    Top de objetos reconocidos más frecuentes en la sesión.
+    Útil para saber qué objetos se depositan más en RECI.
+    """
+    return {
+        "success":           True,
+        "timestamp":         datetime.now().isoformat(),
+        "total_sesion":      stats.total_clasificaciones,
+        "top_objetos":       stats.objetos_reconocidos_frecuentes(top),
+        "confianza_por_cat": stats.confianza_promedio_por_categoria()
     }
 
 

@@ -115,7 +115,7 @@ Sin compuerta       → RECHAZADO→ servo 0°   → LED rojo  → mensaje audio
 ```
 RECI/
 ├── expert_system/
-│   ├── knowledge_base.py       # 150 reglas IF-THEN en 5 niveles + atributos válidos
+│   ├── knowledge_base.py       # 170 reglas IF-THEN en 5 niveles + atributos válidos
 │   ├── inference_engine.py     # Motor principal: forward chaining, CF MYCIN, meta-reglas
 │   ├── working_memory.py       # Memoria de trabajo — hechos activos por ciclo de inferencia
 │   ├── backward_chaining.py    # Encadenamiento hacia atrás — verificación de hipótesis
@@ -349,6 +349,9 @@ Estos son los datos que el modelo ML extrae de la imagen y que el sistema expert
 | `vaso_plastico_blanco` | PLASTICO | Vasos blancos opacos de cafetería (café, chocolate, té caliente) |
 | `plato_plastico` | PLASTICO | Platos desechables blancos rígidos (comedor campus) |
 | `recipiente_plastico` | PLASTICO | Bowls y contenedores de comida en plástico blanco |
+| `cubierto_plastico` | PLASTICO | Tenedores, cucharas y cuchillos desechables (comedor campus) |
+| `snack_plastico` | PLASTICO | Bolsas de snack: Doritos, chifles, chitos, papas Lay's |
+| `pitillo` | PLASTICO | Pitillos y sorbetes de cafetería |
 | `botella_mocachino` | VIDRIO | Caffe Lato Toni, Don Café |
 | `botella_cerveza_vidrio` | VIDRIO | Pilsener, Club |
 | `botella_salsa_vidrio` | VIDRIO | Gustadina, salsas en vidrio |
@@ -369,7 +372,7 @@ Estos son los datos que el modelo ML extrae de la imagen y que el sistema expert
 
 ```
 InferenceEngine
-    ├── KnowledgeBase          → 150 reglas IF-THEN
+    ├── KnowledgeBase          → 170 reglas IF-THEN
     ├── WorkingMemory          → hechos activos del ciclo actual
     ├── AttributeValidator     → valida los 9 atributos antes de inferir
     ├── MetaRuleEngine         → 12 meta-reglas (ajustan EL CÓMO razonar)
@@ -384,22 +387,22 @@ InferenceEngine
 ```
 1. cargar_hechos()    → validar + cargar atributos en WorkingMemory
 2. MetaRuleEngine     → 12 meta-reglas ajustan el contexto de razonamiento
-3. Forward chaining   → evaluar las 150 reglas contra los hechos actuales
+3. Forward chaining   → evaluar las 170 reglas contra los hechos actuales
 4. CF MYCIN           → combinar evidencia de las reglas disparadas por categoría
 5. Ajustes meta       → aplicar exclusiones, prioridades y sesgos del contexto
 6. BackwardChaining   → verificar la conclusión desde los hechos hacia atrás
 7. decision_hardware()→ traducir conclusión a ángulo servo + LED + mensaje
 ```
 
-### Niveles de reglas (150 reglas)
+### Niveles de reglas (170 reglas)
 
 | Nivel | Cantidad | Descripción |
 |---|---|---|
-| **Nivel 1** | ~36 reglas | Reconocimiento directo: objeto conocido + confianza ML alta o media |
-| **Nivel 2** | ~24 reglas | Razonamiento visual: ML con confianza media, se razona por atributos |
+| **Nivel 1** | ~42 reglas | Reconocimiento directo: objeto conocido + confianza ML alta o media |
+| **Nivel 2** | ~29 reglas | Razonamiento visual: ML con confianza media, se razona por atributos |
 | **Nivel 3** | ~13 reglas | Desempate: transparente vs vidrio, vaso blanco vs yogur vs cartón, vidrio vs plástico |
 | **Nivel 4** | ~6 reglas | Seguridad: baja confianza o desconocido → pide segunda captura |
-| **Nivel 5** | ~71 reglas | Campus Manabí: productos ecuatorianos + vasos blancos, platos y vasos de vidrio |
+| **Nivel 5** | ~80 reglas | Campus Manabí: productos ecuatorianos + vasos, platos, cubiertos, snacks, pitillos |
 
 ### Meta-reglas (12)
 
@@ -419,6 +422,9 @@ Las meta-reglas no clasifican objetos. Ajustan **cómo** razona el sistema antes
 | MR10 | 6 | `objeto = desconocido` + `confianza_ml = media` | Modo cauteloso, umbral CF ≥ 0.70 |
 | MR11 | 8 | `color = variado_vivo` + `brillo = bajo` + `transparencia = ninguna` | Sesgo PLÁSTICO +7% (Fioravanti, jugos) |
 | MR12 | 9 | `forma = rectangular_plana` + `rigidez = rigido` + `transparencia = ninguna` | Excluye VIDRIO y LATA, sesgo ORGÁNICO +8% (Tetra Pak) |
+| MR13 | 8 | `color = blanco_opaco` + `textura = lisa_brillante` + `rigidez = rigido` + `tapa = sin_tapa` | Excluye VIDRIO y LATA, sesgo PLÁSTICO +10% (vasos/platos/cubiertos blancos) |
+| MR14 | 9 | `rigidez = flexible` + `tapa = sellado` | Excluye VIDRIO y LATA, sesgo PLÁSTICO +6% (bolsas de snack, fundas) |
+| MR15 | 8 | `forma = cilindrica_delgada` + `tapa = sin_tapa` + `rigidez = rigido` + color no metálico | Excluye VIDRIO, sesgo PLÁSTICO +5% (pitillos, sorbetes) |
 
 ### Factor de Certeza MYCIN
 
@@ -1059,6 +1065,39 @@ uvicorn api.app:app --reload --port 8000
 
 ## Changelog — historial de cambios
 
+### Junio 2026 — v2.3 (corto plazo: snacks, cubiertos, pitillos + dashboard de estadísticas)
+
+**`expert_system/knowledge_base.py`**
+- 3 nuevos `objeto_reconocido`: `cubierto_plastico`, `snack_plastico`, `pitillo`.
+- +8 reglas Nivel 1 (R19_W–R19_AB): reconocimiento directo de los 3 nuevos objetos.
+- +5 reglas Nivel 2 (R69_C1–R69_P): razonamiento visual por atributos (cubiertos, snacks, pitillos).
+- +10 reglas Nivel 5 (R151–R160): reglas campus para comedor y cafetería PUCE Manabí.
+
+**`expert_system/meta_rules.py`**
+- **MR13**: `blanco_opaco + lisa_brillante + rigido + sin_tapa` → excluye VIDRIO/LATA, sesgo PLÁSTICO +10%. Patrón inequívoco de vasos/platos/cubiertos desechables.
+- **MR14**: `flexible + sellado` → excluye VIDRIO/LATA, sesgo PLÁSTICO +6%. Cubre bolsas de snack y fundas.
+- **MR15**: `cilindrica_delgada + sin_tapa + rigido + color no metálico` → excluye VIDRIO, sesgo PLÁSTICO +5%. Pitillos y sorbetes (la condición "no metálico" evita interferir con latas).
+
+**`expert_system/statistics.py`**
+- `contadores_objeto`: nuevo dict que cuenta cuántas veces apareció cada `objeto_reconocido` en la sesión.
+- `confianza_por_cat`: lista de confianzas por categoría para calcular promedios reales.
+- `objetos_reconocidos_frecuentes(top)`: top N objetos más frecuentes con cantidad y porcentaje.
+- `confianza_promedio_por_categoria()`: confianza promedio real por VIDRIO/PLASTICO/etc.
+- `payload_detalle()`: payload extendido para el nuevo endpoint de dashboard.
+
+**`api/app.py`**
+- `GET /estadisticas/detalle`: estadísticas extendidas con top 20 historial, desglose por objeto y confianza por categoría.
+- `GET /estadisticas/objetos?top=N`: top N objetos más frecuentes detectados en la sesión.
+- Versión actualizada a `2.2.0` en el endpoint raíz.
+
+**`vision/attribute_extractor.py`** y **`vision/tm_classifier.py`**
+- 3 nuevos objetos en el prompt de Gemini con guía de diferenciación.
+- 3 nuevas entradas en `MAPA_CLASES` de TM.
+
+**`tests/casos/casos_plastico.py`**
+- +9 casos (T63–T71): cubiertos, snacks (Doritos/chifles), pitillos.
+- **Resultado: 104/104 pruebas aprobadas (100%).**
+
 ### Junio 2026 — v2.2 (nuevos objetos: vasos blancos, platos y vasos de vidrio)
 
 **`expert_system/knowledge_base.py`**
@@ -1124,4 +1163,4 @@ uvicorn api.app:app --reload --port 8000
 
 ---
 
-*Última actualización: Junio 2026 — v2.2 · Sistema experto 150 reglas · 31 objetos reconocidos · 95/95 tests · Flujo híbrido TM+Gemini+SE*
+*Última actualización: Junio 2026 — v2.3 · Sistema experto 170 reglas · 15 meta-reglas · 34 objetos reconocidos · 104/104 tests · Dashboard de estadísticas*

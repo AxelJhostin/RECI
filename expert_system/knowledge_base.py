@@ -30,6 +30,7 @@ ATRIBUTOS = {
                              "botella_cola_gallito", "botella_gatorade",
                              "vaso_plastico_blanco", "vaso_vidrio",
                              "plato_plastico", "recipiente_plastico",
+                             "cubierto_plastico", "snack_plastico", "pitillo",
                              "desconocido"]
 }
 
@@ -148,6 +149,14 @@ class KnowledgeBase:
             Rule("R19_T", {"objeto_reconocido": "plato_plastico",       "confianza_ml": "media"}, "PLASTICO", 0.89, "Probable plato plástico con confianza media — desechable blanco rígido"),
             Rule("R19_U", {"objeto_reconocido": "recipiente_plastico",  "confianza_ml": "alta"},  "PLASTICO", 0.97, "Recipiente plástico (bowl/contenedor) identificado — plástico rígido sin cuello de botella"),
             Rule("R19_V", {"objeto_reconocido": "recipiente_plastico",  "confianza_ml": "media"}, "PLASTICO", 0.90, "Probable recipiente plástico con confianza media — bowl o contenedor desechable"),
+
+            # ── Nuevos objetos: cubiertos, snacks y pitillos ──────────────────
+            Rule("R19_W", {"objeto_reconocido": "cubierto_plastico",    "confianza_ml": "alta"},  "PLASTICO", 0.97, "Cubierto desechable (tenedor/cuchara/cuchillo) identificado — plástico blanco o transparente"),
+            Rule("R19_X", {"objeto_reconocido": "cubierto_plastico",    "confianza_ml": "media"}, "PLASTICO", 0.89, "Probable cubierto plástico desechable con confianza media"),
+            Rule("R19_Y", {"objeto_reconocido": "snack_plastico",       "confianza_ml": "alta"},  "PLASTICO", 0.96, "Empaque de snack (Doritos/chifles/chitos) identificado — plástico flexible o metalizado"),
+            Rule("R19_Z", {"objeto_reconocido": "snack_plastico",       "confianza_ml": "media"}, "PLASTICO", 0.88, "Probable empaque de snack con confianza media — plástico flexible metalizado"),
+            Rule("R19_AA", {"objeto_reconocido": "pitillo",             "confianza_ml": "alta"},  "PLASTICO", 0.96, "Pitillo o sorbete identificado — plástico delgado cilíndrico"),
+            Rule("R19_AB", {"objeto_reconocido": "pitillo",             "confianza_ml": "media"}, "PLASTICO", 0.87, "Probable pitillo con confianza media — objeto muy delgado transparente o de color"),
         ]
 
         # ── NIVEL 2: Razonamiento por atributos visuales ─────────────────
@@ -246,6 +255,35 @@ class KnowledgeBase:
             Rule("R69_V", {"transparencia": "alta", "forma": "conica",
                             "brillo": "medio_difuso", "rigidez": "rigido"}, "PLASTICO", 0.96,
                  "Transparente cónico rígido con brillo difuso → vaso plástico tipo cafetería, definitivamente no vidrio"),
+
+            # ── Cubiertos desechables de plástico ────────────────────────────
+            # Tenedores, cucharas, cuchillos — forma irregular, blancos o transparentes, rígidos
+            Rule("R69_C1", {"color": "blanco_opaco", "forma": "irregular",
+                             "rigidez": "rigido", "textura": "lisa_brillante", "tapa": "sin_tapa"},
+                 "PLASTICO", 0.91,
+                 "Blanco opaco irregular rígido y liso sin tapa → cubierto desechable de plástico"),
+            Rule("R69_C2", {"transparencia": "alta", "forma": "irregular",
+                             "rigidez": "rigido", "textura": "lisa_brillante", "brillo": "medio_difuso"},
+                 "PLASTICO", 0.89,
+                 "Transparente irregular rígido y liso con brillo difuso → cubierto plástico transparente"),
+
+            # ── Empaques de snack ─────────────────────────────────────────────
+            # Bolsas de Doritos, chifles, chitos — flexible, sellado, variado_vivo o metálico
+            Rule("R69_S1", {"rigidez": "flexible", "tapa": "sellado",
+                             "color": "variado_vivo", "textura": "lisa_brillante"},
+                 "PLASTICO", 0.94,
+                 "Flexible sellado con colores vivos y textura lisa → empaque de snack plástico (Doritos/chifles)"),
+            Rule("R69_S2", {"rigidez": "flexible", "tapa": "sellado",
+                             "brillo": "metalico", "forma": "rectangular_plana"},
+                 "PLASTICO", 0.93,
+                 "Flexible sellado metálico rectangular → empaque de snack metalizado (chitos/papas fritas)"),
+
+            # ── Pitillo / sorbete ─────────────────────────────────────────────
+            # R96 ya cubre el caso visual básico. Estas reglas refuerzan con objeto reconocido.
+            Rule("R69_P", {"objeto_reconocido": "pitillo", "forma": "cilindrica_delgada",
+                            "rigidez": "rigido"},
+                 "PLASTICO", 0.96,
+                 "Pitillo identificado con forma delgada y rígida → plástico cilíndrico muy estrecho"),
         ]
 
         # ── NIVEL 4: Reglas de seguridad ────────────────────────────────
@@ -656,6 +694,65 @@ class KnowledgeBase:
                           "tapa": "sin_tapa", "brillo": "alto_nitido"},
                  "VIDRIO", 0.96,
                  "Vaso vidrio sin tapa con brillo nítido → confirmado vidrio reutilizable"),
+
+            # ── Cubiertos desechables campus ─────────────────────────────────
+            # Tenedores/cucharas/cuchillos del comedor de PUCE Manabí
+            Rule("R151", {"objeto_reconocido": "cubierto_plastico",
+                          "color": "blanco_opaco", "rigidez": "rigido"},
+                 "PLASTICO", 0.97,
+                 "Cubierto plástico blanco rígido del comedor → plástico desechable campus"),
+
+            Rule("R152", {"objeto_reconocido": "cubierto_plastico",
+                          "forma": "irregular", "textura": "lisa_brillante"},
+                 "PLASTICO", 0.96,
+                 "Cubierto plástico irregular y liso → tenedor/cuchara/cuchillo desechable"),
+
+            Rule("R153", {"color": "blanco_opaco", "forma": "irregular",
+                          "rigidez": "rigido", "brillo": "bajo", "tapa": "sin_tapa"},
+                 "PLASTICO", 0.88,
+                 "Blanco opaco irregular rígido con brillo bajo → probable cubierto plástico (no cubierto de cartón)"),
+
+            # ── Empaques de snack campus ──────────────────────────────────────
+            # Doritos, chifles, chitos, papas Lay's — muy comunes en el campus
+            Rule("R154", {"objeto_reconocido": "snack_plastico",
+                          "rigidez": "flexible", "tapa": "sellado"},
+                 "PLASTICO", 0.97,
+                 "Empaque de snack flexible sellado → plástico metalizado campus (Doritos/chifles/chitos)"),
+
+            Rule("R155", {"objeto_reconocido": "snack_plastico",
+                          "color": "variado_vivo", "forma": "irregular"},
+                 "PLASTICO", 0.95,
+                 "Empaque snack con colores vivos e irregular → bolsa de snack plástico"),
+
+            Rule("R156", {"rigidez": "flexible", "color": "variado_vivo",
+                          "tapa": "sellado", "brillo": "metalico"},
+                 "PLASTICO", 0.94,
+                 "Flexible sellado colorido con brillo metálico → empaque de snack metalizado (Doritos/Lay's)"),
+
+            Rule("R157", {"rigidez": "flexible", "tapa": "sellado",
+                          "transparencia": "ninguna", "textura": "lisa_brillante",
+                          "color": "variado_vivo"},
+                 "PLASTICO", 0.93,
+                 "Flexible sellado opaco colorido liso → bolsa de snack plástico, no funda ni snack metálico"),
+
+            # ── Pitillos / sorbetes campus ────────────────────────────────────
+            # Sorbetes de cafetería — delgados, rígidos, con o sin envoltura
+            Rule("R158", {"objeto_reconocido": "pitillo",
+                          "forma": "cilindrica_delgada", "rigidez": "rigido",
+                          "transparencia": "alta"},
+                 "PLASTICO", 0.97,
+                 "Pitillo transparente delgado rígido → sorbete de cafetería campus"),
+
+            Rule("R159", {"objeto_reconocido": "pitillo",
+                          "forma": "cilindrica_delgada", "color": "variado_vivo"},
+                 "PLASTICO", 0.96,
+                 "Pitillo de color delgado → sorbete de colores de cafetería o bebida"),
+
+            Rule("R160", {"forma": "cilindrica_delgada", "rigidez": "rigido",
+                          "tapa": "sin_tapa", "textura": "lisa_brillante",
+                          "brillo": "medio_difuso", "transparencia": "ninguna"},
+                 "PLASTICO", 0.91,
+                 "Cilíndrico muy delgado rígido opaco sin tapa → pitillo de color o sorbete plástico"),
         ]
 
     def obtener_reglas(self):

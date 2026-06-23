@@ -15,6 +15,10 @@ class RECIStatistics:
             "LATA":        0,
             "DESCONOCIDO": 0
         }
+        self.contadores_objeto  = {}   # conteo por objeto_reconocido específico
+        self.confianza_por_cat  = {    # suma de confianzas por categoría (para promedio)
+            "VIDRIO": [], "PLASTICO": [], "ORGANICO": [], "LATA": [], "DESCONOCIDO": []
+        }
         self.total_clasificaciones = 0
         self.total_exitosas        = 0  # vidrio o plástico
         self.total_rechazadas      = 0  # orgánico, lata, desconocido
@@ -41,6 +45,12 @@ class RECIStatistics:
 
         if conclusion in self.contadores:
             self.contadores[conclusion] += 1
+
+        obj = objeto_reconocido or "desconocido"
+        self.contadores_objeto[obj] = self.contadores_objeto.get(obj, 0) + 1
+
+        if conclusion in self.confianza_por_cat and confianza > 0:
+            self.confianza_por_cat[conclusion].append(confianza)
 
         if conclusion in ["VIDRIO", "PLASTICO"]:
             self.total_exitosas += 1
@@ -77,12 +87,37 @@ class RECIStatistics:
         return round(self.total_exitosas / self.total_clasificaciones * 100, 1)
 
     def objeto_mas_frecuente(self):
-        """
-        Retorna la categoría más clasificada.
-        """
+        """Retorna la categoría más clasificada."""
         if not self.historial:
             return None
         return max(self.contadores, key=self.contadores.get)
+
+    def objetos_reconocidos_frecuentes(self, top: int = 10):
+        """
+        Retorna los objeto_reconocido más frecuentes como lista de dicts,
+        ordenados de mayor a menor.
+        """
+        ordenados = sorted(
+            self.contadores_objeto.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+        total = self.total_clasificaciones or 1
+        return [
+            {
+                "objeto":    obj,
+                "cantidad":  cnt,
+                "porcentaje": round(cnt / total * 100, 1)
+            }
+            for obj, cnt in ordenados[:top]
+        ]
+
+    def confianza_promedio_por_categoria(self):
+        """Retorna la confianza promedio por cada categoría de clasificación."""
+        resultado = {}
+        for cat, lista in self.confianza_por_cat.items():
+            resultado[cat] = round(sum(lista) / len(lista) * 100, 1) if lista else 0.0
+        return resultado
 
     def reporte(self):
         """
@@ -157,6 +192,19 @@ class RECIStatistics:
             "confianza_promedio_pct":self.confianza_promedio() * 100,
             "segunda_captura":       self.segunda_captura,
             "objeto_mas_frecuente":  self.objeto_mas_frecuente()
+        }
+
+    def payload_detalle(self):
+        """
+        Payload extendido para el endpoint /estadisticas/detalle.
+        Incluye desglose por objeto_reconocido y confianza por categoría.
+        """
+        return {
+            **self.payload_dashboard(),
+            "objetos_frecuentes":       self.objetos_reconocidos_frecuentes(10),
+            "confianza_por_categoria":  self.confianza_promedio_por_categoria(),
+            "total_exitosas":           self.total_exitosas,
+            "total_rechazadas":         self.total_rechazadas,
         }
 
     def resetear(self):
