@@ -92,4 +92,46 @@ CASOS_VIDRIO = [
             "tapa": "corona_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
         }
     },
+
+    # ── Vasos de vidrio ───────────────────────────────────────────────────
+    {
+        "id": "T50", "nombre": "Vaso tumbler de vidrio transparente (reutilizable)",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "vaso_vidrio", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_ancha", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T51", "nombre": "Vaso vidrio cónico de diseño",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "vaso_vidrio", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "conica", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T52", "nombre": "Vaso de vidrio confianza media",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "vaso_vidrio", "confianza_ml": "media",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_ancha", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T53", "nombre": "Vaso vidrio sin objeto_reconocido claro (solo atributos)",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_ancha", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
 ]

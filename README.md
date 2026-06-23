@@ -115,7 +115,7 @@ Sin compuerta       → RECHAZADO→ servo 0°   → LED rojo  → mensaje audio
 ```
 RECI/
 ├── expert_system/
-│   ├── knowledge_base.py       # 113 reglas IF-THEN en 5 niveles + atributos válidos
+│   ├── knowledge_base.py       # 150 reglas IF-THEN en 5 niveles + atributos válidos
 │   ├── inference_engine.py     # Motor principal: forward chaining, CF MYCIN, meta-reglas
 │   ├── working_memory.py       # Memoria de trabajo — hechos activos por ciclo de inferencia
 │   ├── backward_chaining.py    # Encadenamiento hacia atrás — verificación de hipótesis
@@ -346,6 +346,9 @@ Estos son los datos que el modelo ML extrae de la imagen y que el sistema expert
 | `botella_enjuague_bucal` | PLASTICO | Colgate Plax, Listerine |
 | `botella_cola_gallito` | PLASTICO | Cola Gallito — gaseosa ecuatoriana |
 | `botella_gatorade` | PLASTICO | Gatorade — bebida deportiva boca ancha |
+| `vaso_plastico_blanco` | PLASTICO | Vasos blancos opacos de cafetería (café, chocolate, té caliente) |
+| `plato_plastico` | PLASTICO | Platos desechables blancos rígidos (comedor campus) |
+| `recipiente_plastico` | PLASTICO | Bowls y contenedores de comida en plástico blanco |
 | `botella_mocachino` | VIDRIO | Caffe Lato Toni, Don Café |
 | `botella_cerveza_vidrio` | VIDRIO | Pilsener, Club |
 | `botella_salsa_vidrio` | VIDRIO | Gustadina, salsas en vidrio |
@@ -358,6 +361,7 @@ Estos son los datos que el modelo ML extrae de la imagen y que el sistema expert
 | `restos_comida` | ORGANICO | Cualquier resto de comida |
 | `papel_servilleta` | ORGANICO | Papel, servilletas |
 | `carton` | ORGANICO | Cajas de cartón |
+| `vaso_vidrio` | VIDRIO | Vasos/tumblers de vidrio reutilizables (brillo nítido, sin cuello de botella) |
 | `lata` | LATA | Red Bull, Monster lata, atún, Coca-Cola lata |
 | `desconocido` | DESCONOCIDO | Objeto no identificable |
 
@@ -365,7 +369,7 @@ Estos son los datos que el modelo ML extrae de la imagen y que el sistema expert
 
 ```
 InferenceEngine
-    ├── KnowledgeBase          → 113 reglas IF-THEN
+    ├── KnowledgeBase          → 150 reglas IF-THEN
     ├── WorkingMemory          → hechos activos del ciclo actual
     ├── AttributeValidator     → valida los 9 atributos antes de inferir
     ├── MetaRuleEngine         → 12 meta-reglas (ajustan EL CÓMO razonar)
@@ -380,22 +384,22 @@ InferenceEngine
 ```
 1. cargar_hechos()    → validar + cargar atributos en WorkingMemory
 2. MetaRuleEngine     → 12 meta-reglas ajustan el contexto de razonamiento
-3. Forward chaining   → evaluar las 113 reglas contra los hechos actuales
+3. Forward chaining   → evaluar las 150 reglas contra los hechos actuales
 4. CF MYCIN           → combinar evidencia de las reglas disparadas por categoría
 5. Ajustes meta       → aplicar exclusiones, prioridades y sesgos del contexto
 6. BackwardChaining   → verificar la conclusión desde los hechos hacia atrás
 7. decision_hardware()→ traducir conclusión a ángulo servo + LED + mensaje
 ```
 
-### Niveles de reglas (113 reglas)
+### Niveles de reglas (150 reglas)
 
 | Nivel | Cantidad | Descripción |
 |---|---|---|
-| **Nivel 1** | ~28 reglas | Reconocimiento directo: objeto conocido + confianza ML alta o media |
-| **Nivel 2** | ~15 reglas | Razonamiento visual: ML con confianza media, se razona por atributos |
-| **Nivel 3** | ~7 reglas | Desempate: plástico transparente vs vidrio transparente (el caso más difícil) |
+| **Nivel 1** | ~36 reglas | Reconocimiento directo: objeto conocido + confianza ML alta o media |
+| **Nivel 2** | ~24 reglas | Razonamiento visual: ML con confianza media, se razona por atributos |
+| **Nivel 3** | ~13 reglas | Desempate: transparente vs vidrio, vaso blanco vs yogur vs cartón, vidrio vs plástico |
 | **Nivel 4** | ~6 reglas | Seguridad: baja confianza o desconocido → pide segunda captura |
-| **Nivel 5** | ~57 reglas | Campus Manabí: productos ecuatorianos específicos con reglas propias |
+| **Nivel 5** | ~71 reglas | Campus Manabí: productos ecuatorianos + vasos blancos, platos y vasos de vidrio |
 
 ### Meta-reglas (12)
 
@@ -939,7 +943,7 @@ La API gratuita de Gemini 2.5 Flash tiene ~250 requests/día. Si se hacen muchas
 ```bash
 python3 tests/test_cases.py
 ```
-Si algún caso falla, el output muestra exactamente qué reglas se dispararon. Revisar `knowledge_base.py` en el nivel de regla correspondiente. El ID de cada regla indica su nivel (R01-R19: nivel 1, R20-R51: nivel 2, etc.).
+Si algún caso falla, el output muestra exactamente qué reglas se dispararon. Revisar `knowledge_base.py` en el nivel de regla correspondiente. El ID de cada regla indica su nivel (R01-R19: nivel 1, R20-R49: nivel 2, R60-R69: nivel 3, R70-R82: nivel 4, R90-R150: nivel 5).
 
 ### La API da error al importar
 ```
@@ -1055,6 +1059,36 @@ uvicorn api.app:app --reload --port 8000
 
 ## Changelog — historial de cambios
 
+### Junio 2026 — v2.2 (nuevos objetos: vasos blancos, platos y vasos de vidrio)
+
+**`expert_system/knowledge_base.py`**
+- 4 nuevos `objeto_reconocido`: `vaso_plastico_blanco`, `vaso_vidrio`, `plato_plastico`, `recipiente_plastico`.
+- +8 reglas de Nivel 1 (R19_O–R19_V): reconocimiento directo de los nuevos objetos con confianza alta y media.
+- +12 reglas de Nivel 2 (R37–R49): atributos visuales para cuando el ML no reconoce el objeto específico:
+  - R37–R39: vaso blanco plástico (cónico, opaco, rígido, liso — diferente a cartón que es fibroso).
+  - R44–R46: plato plástico (plano, blanco, rígido, brillo difuso — diferente a servilleta flexible).
+  - R47–R49: vaso de vidrio (transparente, brillo nítido, ancho, sin tapa).
+- +9 reglas de Nivel 3 (R67–R69_V): desempate fino para los casos críticos:
+  - R67: vaso blanco cónico liso → PLASTICO (requiere `textura: lisa_brillante` para no confundir con cartón fibroso).
+  - R68–R69: plato rígido → PLASTICO vs plato flexible → ORGANICO.
+  - R67_V–R69_V: brillo nítido = vidrio vs brillo difuso = plástico en vasos transparentes.
+- +12 reglas de Nivel 5 (R139–R150): reglas campus con contexto específico de objetos blancos del comedor y cafetería PUCE Manabí.
+
+**`vision/attribute_extractor.py`**
+- 4 nuevos valores en el prompt de Gemini con guía rápida y diferencias clave entre objetos similares:
+  - `vaso_plastico_blanco` vs `yogur_plastico` (forma cónica vs cilíndrica ancha).
+  - `plato_plastico` vs `papel_servilleta` (rígido y liso vs flexible y fibroso).
+  - `vaso_vidrio` vs `vaso_plastico` (brillo nítido vs brillo difuso).
+
+**`vision/tm_classifier.py`**
+- 5 nuevas entradas en `MAPA_CLASES`: `vaso_plastico_blanco`, `vaso_plastico_blanco_con_tapa`, `vaso_vidrio`, `plato_plastico`, `recipiente_plastico`.
+
+**`tests/casos/`**
+- `casos_plastico.py`: +9 casos (T39–T47) — vasos blancos (café, chocolate), platos y bowls.
+- `casos_vidrio.py`: +4 casos (T50–T53) — vasos tumbler y cónicos de vidrio, por objeto y por atributos.
+- `casos_ambiguos.py`: +8 casos (T55–T62) — diferenciación: vaso blanco vs yogur, plato vs servilleta, vaso vidrio vs vaso plástico, vaso plástico vs cartón.
+- **Resultado: 95/95 pruebas aprobadas (100%).**
+
 ### Junio 2026 — v2.1 (mejoras de producción)
 
 **`vision/attribute_extractor.py`**
@@ -1090,4 +1124,4 @@ uvicorn api.app:app --reload --port 8000
 
 ---
 
-*Última actualización: Junio 2026 — v2.1 · Sistema experto v2.0 · Flujo híbrido TM+Gemini+SE · Threading en cámara · Logging persistente*
+*Última actualización: Junio 2026 — v2.2 · Sistema experto 150 reglas · 31 objetos reconocidos · 95/95 tests · Flujo híbrido TM+Gemini+SE*

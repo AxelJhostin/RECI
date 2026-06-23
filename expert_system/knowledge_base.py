@@ -28,6 +28,8 @@ ATRIBUTOS = {
                              "botella_jugo_plastico", "tetra_pak",
                              "botella_pony_malta", "botella_enjuague_bucal",
                              "botella_cola_gallito", "botella_gatorade",
+                             "vaso_plastico_blanco", "vaso_vidrio",
+                             "plato_plastico", "recipiente_plastico",
                              "desconocido"]
 }
 
@@ -136,6 +138,16 @@ class KnowledgeBase:
             Rule("R19_L", {"objeto_reconocido": "botella_cola_gallito", "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable Cola Gallito con confianza media — gaseosa ecuatoriana"),
             Rule("R19_M", {"objeto_reconocido": "botella_gatorade",     "confianza_ml": "alta"},  "PLASTICO", 0.98, "Gatorade identificado — bebida deportiva en plástico boca ancha"),
             Rule("R19_N", {"objeto_reconocido": "botella_gatorade",     "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable Gatorade con confianza media — bebida deportiva plástico"),
+
+            # ── Nuevos objetos: vasos blancos, vasos de vidrio, platos y recipientes ──
+            Rule("R19_O", {"objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "alta"},  "PLASTICO", 0.98, "Vaso blanco opaco de plástico identificado — café, chocolate u otras bebidas calientes"),
+            Rule("R19_P", {"objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable vaso blanco plástico con confianza media — café o infusión en desechable"),
+            Rule("R19_Q", {"objeto_reconocido": "vaso_vidrio",          "confianza_ml": "alta"},  "VIDRIO",   0.97, "Vaso de vidrio (tumbler) identificado — vidrio transparente sin cuello de botella"),
+            Rule("R19_R", {"objeto_reconocido": "vaso_vidrio",          "confianza_ml": "media"}, "VIDRIO",   0.88, "Probable vaso de vidrio con confianza media — distinguir de vaso plástico por brillo nítido"),
+            Rule("R19_S", {"objeto_reconocido": "plato_plastico",       "confianza_ml": "alta"},  "PLASTICO", 0.97, "Plato desechable de plástico identificado — blanco rígido, no es papel"),
+            Rule("R19_T", {"objeto_reconocido": "plato_plastico",       "confianza_ml": "media"}, "PLASTICO", 0.89, "Probable plato plástico con confianza media — desechable blanco rígido"),
+            Rule("R19_U", {"objeto_reconocido": "recipiente_plastico",  "confianza_ml": "alta"},  "PLASTICO", 0.97, "Recipiente plástico (bowl/contenedor) identificado — plástico rígido sin cuello de botella"),
+            Rule("R19_V", {"objeto_reconocido": "recipiente_plastico",  "confianza_ml": "media"}, "PLASTICO", 0.90, "Probable recipiente plástico con confianza media — bowl o contenedor desechable"),
         ]
 
         # ── NIVEL 2: Razonamiento por atributos visuales ─────────────────
@@ -159,6 +171,24 @@ class KnowledgeBase:
             Rule("R34", {"transparencia": "ninguna", "color": "blanco_opaco",  "forma": "cilindrica_ancha"},  "PLASTICO", 0.94, "Blanco opaco cilíndrico ancho → yogur plástico"),
             Rule("R35", {"rigidez": "flexible",      "color": "negro"},                                       "PLASTICO", 0.93, "Flexible y negro → funda plástica"),
             Rule("R36", {"transparencia": "ninguna", "color": "negro",         "brillo": "medio_difuso"},     "PLASTICO", 0.88, "Negro opaco con brillo medio → Monster o botella plástica oscura"),
+
+            # Vaso blanco de plástico — cónico o estrecho, opaco, rígido, textura lisa (no fibrosa como cartón)
+            Rule("R37", {"color": "blanco_opaco", "forma": "conica",       "rigidez": "rigido", "tapa": "sin_tapa",
+                          "textura": "lisa_brillante"},                                                                           "PLASTICO", 0.96, "Blanco opaco cónico rígido sin tapa y liso brillante → vaso plástico (cartón sería fibroso)"),
+            Rule("R38", {"color": "blanco_opaco", "forma": "conica",       "brillo": "medio_difuso", "textura": "lisa_brillante"}, "PLASTICO", 0.94, "Blanco opaco cónico con brillo difuso y textura lisa → vaso plástico blanco de cafetería"),
+            Rule("R39", {"color": "blanco_opaco", "rigidez": "rigido",     "brillo": "medio_difuso", "tapa": "sin_tapa",
+                          "forma": "cilindrica_estandar"},                                                                         "PLASTICO", 0.93, "Blanco opaco cilíndrico estándar rígido sin tapa → vaso de plástico blanco"),
+
+            # Plato de plástico — plano, blanco, rígido (diferente a servilleta que es flexible/lisa_sin_brillo)
+            Rule("R44", {"color": "blanco_opaco", "forma": "rectangular_plana", "rigidez": "rigido", "brillo": "medio_difuso"},   "PLASTICO", 0.96, "Blanco opaco plano rígido con brillo difuso → plato desechable plástico (no servilleta)"),
+            Rule("R45", {"color": "blanco_opaco", "forma": "rectangular_plana", "rigidez": "rigido", "textura": "lisa_brillante"}, "PLASTICO", 0.97, "Blanco opaco plano rígido y liso brillante → plato desechable plástico"),
+            Rule("R46", {"color": "blanco_opaco", "forma": "irregular",         "rigidez": "rigido", "brillo": "medio_difuso"},   "PLASTICO", 0.91, "Blanco opaco forma irregular rígido → recipiente o plato plástico redondo visto de arriba"),
+
+            # Vaso de vidrio — transparente, brillo nítido, ancho o cónico sin tapa
+            Rule("R47", {"transparencia": "alta", "brillo": "alto_nitido", "forma": "cilindrica_ancha",   "tapa": "sin_tapa"},    "VIDRIO",   0.94, "Transparente con brillo nítido de vidrio, ancho y sin tapa → vaso tumbler de vidrio"),
+            Rule("R48", {"transparencia": "alta", "brillo": "alto_nitido", "forma": "conica",             "tapa": "sin_tapa"},    "VIDRIO",   0.91, "Transparente nítido cónico sin tapa → vaso de vidrio de diseño"),
+            Rule("R49", {"transparencia": "alta", "brillo": "alto_nitido", "rigidez": "rigido",           "tapa": "sin_tapa",
+                          "textura": "lisa_brillante"},                                                                            "VIDRIO",   0.90, "Transparente nítido rígido sin tapa y liso brillante → vaso o recipiente de vidrio"),
 
             # ORGÁNICO — señales visuales
             Rule("R40", {"forma": "irregular",       "textura": "rugosa",      "color": "marron_tierra"},     "ORGANICO", 0.95, "Irregular rugoso marrón → resto de comida u orgánico"),
@@ -193,6 +223,29 @@ class KnowledgeBase:
                  "Negro flexible y liso brillante → funda plástica, no orgánico"),
             Rule("R66", {"color": "marron_tierra", "rigidez": "flexible", "textura": "rugosa"}, "ORGANICO", 0.95,
                  "Marrón flexible y rugoso → cáscara de fruta u orgánico"),
+
+            # ── Desempate: vaso blanco plástico vs yogur vs servilleta ───────
+            # Clave: forma cónica → vaso; cilindrica_ancha → yogur; rectangular → papel
+            # textura lisa_brillante distingue plástico de cartón (fibrosa)
+            Rule("R67", {"color": "blanco_opaco", "forma": "conica", "rigidez": "rigido",
+                          "textura": "lisa_brillante"},                                                "PLASTICO", 0.96,
+                 "Blanco opaco cónico rígido y liso → vaso de plástico, NO yogur ni cartón (cartón es fibroso)"),
+            Rule("R68", {"color": "blanco_opaco", "forma": "rectangular_plana","rigidez": "rigido"},  "PLASTICO", 0.95,
+                 "Blanco opaco plano RÍGIDO → plato plástico, NO servilleta (servilleta es flexible)"),
+            Rule("R69", {"color": "blanco_opaco", "forma": "rectangular_plana","rigidez": "flexible"},"ORGANICO", 0.96,
+                 "Blanco opaco plano FLEXIBLE → servilleta o papel, no plato de plástico"),
+
+            # ── Desempate: vaso vidrio vs vaso plástico transparente ─────────
+            # Clave: brillo nítido = vidrio; brillo difuso = plástico PET
+            Rule("R67_V", {"transparencia": "alta", "forma": "cilindrica_ancha",
+                            "brillo": "alto_nitido", "tapa": "sin_tapa"},   "VIDRIO",   0.95,
+                 "Transparente ancho sin tapa con brillo nítido → vaso de vidrio, no PET (PET tiene brillo difuso)"),
+            Rule("R68_V", {"transparencia": "alta", "forma": "cilindrica_ancha",
+                            "brillo": "medio_difuso", "tapa": "sin_tapa"},  "PLASTICO", 0.95,
+                 "Transparente ancho sin tapa con brillo difuso → vaso de plástico, no vidrio"),
+            Rule("R69_V", {"transparencia": "alta", "forma": "conica",
+                            "brillo": "medio_difuso", "rigidez": "rigido"}, "PLASTICO", 0.96,
+                 "Transparente cónico rígido con brillo difuso → vaso plástico tipo cafetería, definitivamente no vidrio"),
         ]
 
         # ── NIVEL 4: Reglas de seguridad ────────────────────────────────
@@ -526,6 +579,83 @@ class KnowledgeBase:
                           "brillo": "medio_difuso"},
                  "PLASTICO", 0.96,
                  "Gaseosa transparente estándar con tapa rosca → Powerade clear, agua saborizada o similar"),
+
+            # ── Vasos desechables blancos de plástico ────────────────────────
+            # Muy comunes en las cafeterías de campus: café, chocolate, jugos
+            Rule("R139", {"objeto_reconocido": "vaso_plastico_blanco",
+                          "forma": "conica", "tapa": "sin_tapa"},
+                 "PLASTICO", 0.98,
+                 "Vaso blanco plástico cónico sin tapa → desechable de cafetería campus"),
+
+            Rule("R140", {"objeto_reconocido": "vaso_plastico_blanco",
+                          "forma": "conica", "tapa": "domo_plastico"},
+                 "PLASTICO", 0.97,
+                 "Vaso blanco plástico cónico con tapa domo → bebida fría con tapa en campus"),
+
+            Rule("R141", {"color": "blanco_opaco", "forma": "conica",
+                          "brillo": "medio_difuso", "rigidez": "rigido",
+                          "tapa": "sin_tapa", "textura": "lisa_brillante"},
+                 "PLASTICO", 0.97,
+                 "Blanco opaco cónico de brillo difuso sin tapa → vaso de café/chocolate plástico de campus"),
+
+            # ── Vasos de vidrio ──────────────────────────────────────────────
+            # Tazas o vasos de vidrio reutilizables traídos al campus
+            Rule("R142", {"objeto_reconocido": "vaso_vidrio",
+                          "brillo": "alto_nitido", "rigidez": "rigido"},
+                 "VIDRIO", 0.97,
+                 "Vaso de vidrio con brillo nítido rígido → vaso reutilizable de vidrio"),
+
+            Rule("R143", {"transparencia": "alta", "brillo": "alto_nitido",
+                          "forma": "cilindrica_ancha", "rigidez": "rigido",
+                          "tapa": "sin_tapa", "textura": "lisa_brillante"},
+                 "VIDRIO", 0.95,
+                 "Transparente ancho nítido rígido sin tapa y liso → vaso tumbler de vidrio"),
+
+            # ── Platos desechables de plástico ──────────────────────────────
+            # Frecuentes en eventos y comedores del campus
+            Rule("R144", {"objeto_reconocido": "plato_plastico",
+                          "color": "blanco_opaco", "rigidez": "rigido"},
+                 "PLASTICO", 0.98,
+                 "Plato plástico blanco opaco rígido → desechable de comida campus"),
+
+            Rule("R145", {"color": "blanco_opaco", "forma": "rectangular_plana",
+                          "rigidez": "rigido", "brillo": "medio_difuso",
+                          "textura": "lisa_brillante"},
+                 "PLASTICO", 0.97,
+                 "Blanco opaco plano rígido y liso brillante → plato desechable de plástico, no servilleta"),
+
+            # ── Recipientes / bowls de plástico ─────────────────────────────
+            # Contenedores de comida, sopas o ensaladas en campus
+            Rule("R146", {"objeto_reconocido": "recipiente_plastico",
+                          "color": "blanco_opaco", "rigidez": "rigido"},
+                 "PLASTICO", 0.97,
+                 "Recipiente plástico blanco rígido → bowl o contenedor de comida del campus"),
+
+            Rule("R147", {"color": "blanco_opaco", "forma": "cilindrica_ancha",
+                          "brillo": "medio_difuso", "rigidez": "rigido",
+                          "tapa": "sin_tapa"},
+                 "PLASTICO", 0.93,
+                 "Blanco opaco cilíndrico ancho rígido sin tapa → bowl de sopa o ensalada plástico"),
+
+            # ── Vaso de café blanco con tapa vs vaso de yogur ────────────────
+            # El yogur tiene forma cilíndrica ancha; el vaso de café es cónico
+            Rule("R148", {"color": "blanco_opaco", "forma": "conica",
+                          "tapa": "domo_plastico", "brillo": "medio_difuso"},
+                 "PLASTICO", 0.96,
+                 "Blanco opaco cónico con domo plástico → vaso de café o té de cafetería con tapa"),
+
+            # ── Refuerzo: vidrio no puede ser blanco opaco ───────────────────
+            Rule("R149", {"color": "blanco_opaco", "brillo": "alto_nitido",
+                          "rigidez": "rigido", "tapa": "sin_tapa"},
+                 "PLASTICO", 0.90,
+                 "Blanco opaco brillante sin tapa → plástico (vidrio blanco opaco no existe en consumo)"),
+
+            # ── Refuerzo: vaso vidrio distinguido de botella ─────────────────
+            # Un vaso de vidrio nunca tiene tapa rosca; si la tiene, es botella
+            Rule("R150", {"objeto_reconocido": "vaso_vidrio",
+                          "tapa": "sin_tapa", "brillo": "alto_nitido"},
+                 "VIDRIO", 0.96,
+                 "Vaso vidrio sin tapa con brillo nítido → confirmado vidrio reutilizable"),
         ]
 
     def obtener_reglas(self):

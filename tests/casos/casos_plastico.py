@@ -182,4 +182,100 @@ CASOS_PLASTICO = [
             "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "flexible"
         }
     },
+
+    # ── Vasos desechables blancos de plástico ─────────────────────────────
+    {
+        "id": "T39", "nombre": "Vaso blanco plástico de café (cafetería campus)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "conica", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T40", "nombre": "Vaso blanco plástico de chocolate con tapa domo",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "conica", "brillo": "medio_difuso",
+            "tapa": "domo_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T41", "nombre": "Vaso blanco plástico confianza media (sin etiqueta ML)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "conica", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+
+    # ── Platos desechables de plástico ────────────────────────────────────
+    {
+        "id": "T42", "nombre": "Plato desechable blanco de plástico (comedor campus)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "plato_plastico", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "rectangular_plana", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T43", "nombre": "Plato plástico blanco confianza media",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "plato_plastico", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "rectangular_plana", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+
+    # ── Recipientes / bowls de plástico ──────────────────────────────────
+    {
+        "id": "T44", "nombre": "Bowl blanco de plástico para sopa (comedor campus)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "recipiente_plastico", "confianza_ml": "alta",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "cilindrica_ancha", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T45", "nombre": "Recipiente plástico blanco confianza media",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "recipiente_plastico", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "cilindrica_ancha", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T46", "nombre": "Plato plástico blanco liso brillante (sin objeto_reconocido claro)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "rectangular_plana", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T47", "nombre": "Vaso café blanco cónico (confianza media, sin objeto ML específico)",
+        "esperado": "PLASTICO", "categoria": "PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "blanco_opaco",
+            "forma": "conica", "brillo": "medio_difuso",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
 ]

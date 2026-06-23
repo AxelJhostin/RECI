@@ -49,7 +49,7 @@ Tu tarea es analizar la imagen y extraer exactamente estos atributos visuales de
 
 ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 
-- objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | botella_fioravanti | botella_aceite_plastico | botella_jugo_plastico | tetra_pak | botella_pony_malta | botella_enjuague_bucal | botella_cola_gallito | botella_gatorade | desconocido
+- objeto_reconocido: botella_agua | botella_gaseosa | botella_energizante | botella_alcoholica_plastico | vaso_plastico | vaso_carton | yogur_plastico | funda_plastico | botella_mocachino | botella_cerveza_vidrio | botella_salsa_vidrio | frasco_vidrio | botella_jugo_vidrio | cascara_fruta | restos_comida | papel_servilleta | carton | lata | botella_fioravanti | botella_aceite_plastico | botella_jugo_plastico | tetra_pak | botella_pony_malta | botella_enjuague_bucal | botella_cola_gallito | botella_gatorade | vaso_plastico_blanco | vaso_vidrio | plato_plastico | recipiente_plastico | desconocido
 
   Guía rápida:
   - botella_fioravanti: gaseosa ecuatoriana, botella PET oscura naranja/marrón con etiqueta de gallo
@@ -60,9 +60,20 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
   - botella_enjuague_bucal: Colgate Plax, Listerine u otro enjuague en plástico
   - botella_cola_gallito: gaseosa ecuatoriana Cola Gallito, PET transparente con etiqueta colorida tipo Coca-Cola
   - botella_gatorade: bebida deportiva Gatorade, PET con boca más ancha que gaseosa estándar
+  - vaso_plastico_blanco: vaso desechable de plástico BLANCO OPACO (no transparente) — típico de cafeterías para café, chocolate, té caliente; forma cónica, sin tapa o con tapa domo
+  - vaso_vidrio: vaso o tumbler de VIDRIO reutilizable — transparente con brillo muy nítido (más que plástico), sin cuello de botella, generalmente ancho o cónico
+  - plato_plastico: plato desechable de plástico — blanco opaco, plano, RÍGIDO; distinguirlo de servilleta (que es flexible y fibrosa)
+  - recipiente_plastico: bowl o contenedor de comida de plástico — blanco opaco, sin cuello de botella, más ancho que alto; usado para sopas, ensaladas, porciones
   - papel_servilleta: hoja de papel, servilleta, papel impreso — NO es plástico ni vidrio
   - carton: caja de cartón, cartulina — NO es plástico ni vidrio
   - lata: envase metálico de aluminio — NO va en ningún compartimento de RECI
+
+  DIFERENCIAS CLAVE para objetos blancos:
+  - vaso_plastico_blanco: blanco opaco, CÓNICO o cilíndrico, brillo difuso (plástico), forma de vaso de cafetería
+  - yogur_plastico: blanco opaco, CILÍNDRICO ANCHO (más gordo que un vaso), para yogur o lácteos
+  - plato_plastico: blanco opaco, PLANO (rectangular o circular visto desde arriba), rígido
+  - papel_servilleta: blanco opaco, PLANO pero FLEXIBLE y fibroso, textura diferente al plástico
+  - vaso_vidrio vs vaso_plastico: el vidrio tiene brillo NÍTIDO reflectante; el plástico tiene brillo DIFUSO mate
 
 - confianza_ml: alta | media | baja
 
