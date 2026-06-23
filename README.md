@@ -26,6 +26,7 @@
 15. [Alineación académica IS502](#alineación-académica-is502)
 16. [División del equipo](#división-del-equipo)
 17. [Estado actual](#estado-actual)
+18. [Changelog — historial de cambios](#changelog--historial-de-cambios)
 
 ---
 
@@ -155,6 +156,8 @@ RECI/
 │   ├── api_uploads/            # Fotos subidas por la API REST (gitignoreado — solo local)
 │   └── prueba1-8.jpeg          # Imágenes de prueba incluidas en el repo
 │
+├── logs/                       # Logs de la API en producción — solo local, no en repo
+│   └── reci.log                # Registro de clasificaciones, errores y eventos
 ├── fotos_dataset/              # Fotos tomadas con tomar_fotos.py — solo local, no en repo
 ├── RECI_entrenar_modelo.ipynb  # Notebook de Google Colab para entrenar el modelo
 ├── main.py                     # Punto de entrada principal — demo completo en consola
@@ -521,6 +524,18 @@ Hardware: GPU Tesla T4 (gratuita en Colab)
 - **Fase 2** — fine-tuning últimas 30 capas, 8 épocas: 99.7% de precisión
 - **Tiempo total:** ~3 horas
 
+**Mejoras implementadas en el notebook (Junio 2026):**
+
+| Mejora | Descripción |
+|---|---|
+| `RANDOM_SEED = 42` | Reproduce exactamente el mismo split en cada entrenamiento |
+| `class_weight` automático | Calcula y aplica pesos para compensar que hay 2.3× más fotos de plástico que de vidrio |
+| Semillas en capas de augmentation | `RandomFlip`, `RandomRotation`, `RandomZoom`, `RandomBrightness` ahora tienen `seed` fijo |
+| Semillas en `image_dataset_from_directory` | El shuffle del dataset es reproducible entre ejecuciones |
+| Métricas detalladas por clase | Cell 19 imprime precision, recall, F1-score y soporte para cada clase, además de la matriz de confusión |
+| Carga explícita antes de exportar | Cell 21 carga `mejor_modelo_ft.keras` explícitamente antes de convertir a `.tflite`, con manejo de error si el archivo no existe |
+| Path corregido | La ruta del dataset apunta a `RECI_dataset_propio/dataset_organizado` (path correcto en Drive) |
+
 ### Reentrenar el modelo con más fotos
 
 ```bash
@@ -557,15 +572,16 @@ python3 tests/test_cases.py
 ```
 Cámara captura imagen (1280×720 px)
         ↓
-MobileNetV2 (.tflite) — ~0.1 seg
+MobileNetV2 (.tflite) — ~0.1 seg         ← siempre corre primero
 Clasifica entre plastico/vidrio
 Su resultado se pasa como CONTEXTO a Gemini
         ↓
-Gemini 2.5 Flash API — ~2 seg        ← siempre se ejecuta
-Analiza la imagen visualmente
-Con el contexto del TM puede confirmar o corregir
+Gemini 2.5 Flash API — ~2 seg             ← siempre se ejecuta
+Analiza la imagen visualmente con el contexto del TM
+Puede confirmar o corregir lo que dijo TM
 Identifica el objeto real: botella PET, frasco de vidrio,
 papel, lata, cartón, etc. — no solo las 2 clases del TM
+Extrae los 9 atributos visuales
         ↓
 9 atributos → Sistema Experto → Decisión final
 ```
@@ -575,6 +591,22 @@ papel, lata, cartón, etc. — no solo las 2 clases del TM
 El modelo TFLite solo conoce 2 clases: `plastico` y `vidrio`. Siempre elige una de las dos, incluso si el objeto es papel, una lata o cartón — y puede hacerlo con 100% de confianza aunque esté equivocado. Gemini ve la imagen real y puede identificar correctamente cualquier objeto, usando el voto del TM como referencia inicial pero sin estar limitado a esas dos clases.
 
 Esto permite que el sistema experto produzca `DESCONOCIDO` (tacho general) para objetos que no son plástico ni vidrio, cumpliendo el alcance del proyecto.
+
+**¿Cómo le habla el TM a Gemini?**
+
+TM corre en ~0.1 seg y pasa su voto dentro del prompt de Gemini como contexto, así:
+
+```
+CONTEXTO DEL CLASIFICADOR RÁPIDO (MobileNetV2):
+El modelo detectó 'plastico' con 99% de confianza.
+Úsalo como referencia inicial, pero confía en tu análisis visual si ves algo diferente.
+```
+
+Gemini puede confirmar o ignorar ese voto si ve algo distinto — lo que importa es su análisis visual.
+
+**Respuesta JSON estructurada:**
+
+Gemini recibe la instrucción `responseMimeType: application/json`, por lo que devuelve JSON puro directamente, sin texto extra ni markdown. Esto lo hace más confiable y rápido de parsear.
 
 **Fallback automático si Gemini no está disponible:**
 
@@ -595,7 +627,7 @@ La ventana de cámara tiene 4 estados secuenciales:
 |---|---|
 | **PREVIEW** | Cámara en vivo — colocar el objeto frente a la cámara |
 | **COUNTDOWN** | Cuenta regresiva de 1 segundo — mantener el objeto quieto |
-| **ANALIZANDO** | Pantalla oscura con animación "Analizando imagen..." — TM + Gemini procesando |
+| **ANALIZANDO** | Pantalla oscura con barra de progreso animada real — TM + Gemini corren en hilo separado mientras la animación se mueve |
 | **RESULTADO** | Clasificación mostrada 5 segundos con destino, confianza y barra de color |
 
 **Controles:**
@@ -685,9 +717,26 @@ Documentación interactiva (Swagger): `http://localhost:8000/docs`
 }
 ```
 
-### Optimización importante
+### Optimizaciones implementadas
 
-El motor de inferencia (`InferenceEngine`) se crea **una sola vez** al iniciar la API y se reutiliza en cada petición. Esto es crítico para el rendimiento en Raspberry Pi: crear el motor desde cero en cada llamada tarda ~4x más que reutilizarlo.
+El motor de inferencia (`InferenceEngine`) y el clasificador TM (`TeachableMachineClassifier`) se crean **una sola vez** al iniciar la API y se reutilizan en cada petición. Esto es crítico para el rendimiento en Raspberry Pi: crearlos desde cero en cada llamada tarda ~4x más que reutilizarlos.
+
+El endpoint `/clasificar/imagen` usa el **mismo flujo híbrido TM+Gemini** que la cámara en tiempo real — no usa TM o Gemini por separado como antes.
+
+Las imágenes subidas en `images/api_uploads/` se limpian automáticamente: el sistema conserva solo los 50 archivos más recientes para evitar que el almacenamiento de la Raspberry Pi se llene.
+
+### Logging persistente
+
+Cada clasificación, error y evento de inicio queda registrado en `logs/reci.log`:
+
+```
+2026-06-22 21:45:12 | INFO | API iniciada | modo=HIBRIDO_TM_GEMINI
+2026-06-22 21:45:38 | INFO | clasificar_imagen | PLASTICO 99.8% | vision=hibrido_tm_gemini | archivo=foto.jpg
+2026-06-22 21:45:41 | INFO | clasificar_atributos | VIDRIO 100.0% | objeto=botella_mocachino
+2026-06-22 21:46:02 | WARNING | Gemini falló (ReadTimeout) — fallback a TM
+```
+
+Útil para diagnosticar errores en producción (Raspberry Pi) sin necesidad de conectar un monitor.
 
 ---
 
@@ -940,21 +989,37 @@ uvicorn api.app:app --reload --port 8000
 
 ### Completado ✅
 
-- Sistema experto: **113 reglas**, forward + backward chaining, CF MYCIN, **12 meta-reglas**
+**Sistema experto:**
+- **113 reglas**, forward + backward chaining, CF MYCIN, **12 meta-reglas**
 - Productos ecuatorianos: Fioravanti, Cola Gallito, Gatorade, Pony Malta, Tetra Pak, Güitig vidrio, Zhumir, Pulp/Tampico, aceite de cocina, Colgate Plax/Listerine
 - Validador de atributos, estadísticas, reporte técnico JSON
 - **74/74 pruebas formales (100%)** — campus, ambiguos, extremos, LATA
-- **Condiciones eliminatorias en backward chaining:** corrigen casos donde VIDRIO o LATA podían "ganar por puntaje" sin cumplir su rasgo más determinante (tapa metálica / brillo metálico). Incluye 6/6 pruebas dedicadas en `tests/test_backward_chaining.py`
-- Regla R51 (LATA) endurecida: ahora requiere color **y** brillo metálicos, evitando que objetos plásticos con etiqueta metálica se clasifiquen como lata al 97%
-- Modelo MobileNetV2 propio (**98.2% precisión**, **21,347 fotos** del campus PUCE Manabí)
-- **Flujo híbrido TM + Gemini rediseñado:** TM siempre da contexto → Gemini siempre analiza visualmente → SE decide. Permite detectar objetos que no son plástico ni vidrio (papel, lata, cartón → tacho general)
-- Cámara en tiempo real con modo demo funcional (3 destinos: compuerta izq, compuerta der, tacho general) — pantalla "Analizando imagen..." visible durante el análisis, manejo robusto de todos los errores de Gemini (429, 503, timeout) sin mostrar pantallas de error
-- Corrección manual en pantalla con teclas P/V disponible en todo momento
-- API REST optimizada (motor compartido — **4x más rápido** en Raspberry Pi)
-- Prompts de Gemini actualizados con guía explícita de objetos no permitidos (papel, lata, cartón)
+- Condiciones eliminatorias en backward chaining: VIDRIO requiere tapa metálica, LATA requiere brillo metálico — ambas con 6/6 pruebas dedicadas
+
+**Modelo ML:**
+- MobileNetV2 propio (**98.2% precisión**, **21,347 fotos** del campus PUCE Manabí)
+- Notebook mejorado: semillas reproducibles (`RANDOM_SEED=42`), `class_weight` automático, métricas por clase (precision/recall/F1), matriz de confusión, path de dataset corregido
+
+**Visión e IA:**
+- Flujo híbrido TM + Gemini: TM da contexto → Gemini analiza visualmente → SE decide
+- Gemini configurado con `responseMimeType: application/json` — respuesta JSON directa sin parseo manual
+- Fallback automático y silencioso a TM-solo cuando Gemini falla (429, 503, timeout)
+
+**Cámara:**
+- Modo demo con 4 estados (PREVIEW → COUNTDOWN → ANALIZANDO → RESULTADO)
+- Análisis TM+Gemini corre en **hilo separado (threading)** — la barra de progreso animada es real, la interfaz nunca se congela
+- Corrección manual con `P`/`V` disponible en cualquier momento
+
+**API REST:**
+- Motor de inferencia **y** clasificador TM cargados globalmente — **4x más rápido** en Raspberry Pi
+- `/clasificar/imagen` usa flujo híbrido TM+Gemini (igual que la cámara)
+- Limpieza automática de `api_uploads/` — conserva solo los 50 más recientes
+- **Logging persistente en `logs/reci.log`** — registro de clasificaciones, errores y eventos de producción
+
+**Otros:**
+- Prompts de Gemini con guía explícita de objetos no permitidos (papel, lata, cartón)
 - Script de recolección de fotos con modo ráfaga automática
-- Notebook de entrenamiento Google Colab listo y documentado
-- Pruebas de imágenes reales con **reporte de tiempo por imagen** y promedio de sesión
+- Pruebas de imágenes reales con reporte de tiempo por imagen y promedio de sesión
 
 ### En progreso 🔄
 
@@ -986,4 +1051,43 @@ uvicorn api.app:app --reload --port 8000
 
 ---
 
-*Última actualización: Junio 2026 — Sistema experto v2.0 · Flujo híbrido TM+Gemini+SE*
+---
+
+## Changelog — historial de cambios
+
+### Junio 2026 — v2.1 (mejoras de producción)
+
+**`vision/attribute_extractor.py`**
+- Gemini ahora recibe `responseMimeType: application/json` y `maxOutputTokens: 256` → devuelve JSON puro, sin markdown ni texto extra. Elimina toda la lógica manual de limpieza de respuesta.
+- Logging con `logger.info` en cada llamada a Gemini para trazabilidad en producción.
+- Método `_parsear_json()` como fallback defensivo para parsear la respuesta de Gemini incluso si viene con texto extra (segunda línea de defensa).
+
+**`vision/camera.py`**
+- El análisis TM+Gemini ahora corre en un **hilo separado** (`threading.Thread`). Antes, la pantalla "Analizando..." se congelaba mientras se esperaba la respuesta de Gemini (2–5 seg). Ahora la barra de progreso se anima de verdad porque el hilo principal de OpenCV nunca se bloquea.
+- Se usa `resultado_hilo = []` (lista compartida) para pasar el resultado del hilo de análisis al hilo de visualización de forma segura.
+
+**`api/app.py`**
+- `TeachableMachineClassifier` se carga **una sola vez al inicio** (variable `tm_global`) en lugar de en cada request. Mejora el tiempo de respuesta ~4x en Raspberry Pi.
+- `/clasificar/imagen` ahora usa el flujo híbrido TM+Gemini completo, igual que la cámara. Antes usaba solo TM o Gemini por separado.
+- `_limpiar_uploads()` limpia `images/api_uploads/` automáticamente conservando solo los 50 más recientes.
+- Logging persistente configurado al arranque: todas las clasificaciones y errores se guardan en `logs/reci.log` con nivel INFO.
+
+**`RECI_entrenar_modelo.ipynb`**
+- `RANDOM_SEED = 42` aplicado globalmente → resultados reproducibles entre ejecuciones.
+- `class_weight` calculado y aplicado en Fase 1 y Fase 2 → compensa el desbalance 2.3:1 entre plástico y vidrio.
+- Métricas detalladas por clase (precision, recall, F1-score, support) y matriz de confusión en la celda de evaluación.
+- Carga explícita de `mejor_modelo_ft.keras` antes de convertir a TFLite con manejo de `FileNotFoundError`.
+- Path del dataset en Drive corregido: `RECI_dataset_propio/dataset_organizado`.
+
+**`.gitignore`**
+- Añadido `logs/` para que los logs de producción no se suban al repo.
+
+### Antes — v2.0
+
+- Sistema experto v2.0: 113 reglas, 12 meta-reglas, condiciones eliminatorias, 74/74 pruebas.
+- Flujo híbrido TM+Gemini diseñado e implementado.
+- Regla R51 endurecida (LATA requiere color + brillo metálico).
+
+---
+
+*Última actualización: Junio 2026 — v2.1 · Sistema experto v2.0 · Flujo híbrido TM+Gemini+SE · Threading en cámara · Logging persistente*
