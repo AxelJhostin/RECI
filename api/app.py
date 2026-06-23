@@ -6,6 +6,7 @@
 import os
 import sys
 import json
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,19 @@ from pydantic import BaseModel
 from expert_system.inference_engine import InferenceEngine
 from expert_system.explanation import ExplanationReport
 from expert_system.statistics import RECIStatistics
+
+# ─────────────────────────────────────────────
+# LOGGING
+# ─────────────────────────────────────────────
+Path("logs").mkdir(exist_ok=True)
+logging.basicConfig(
+    filename="logs/reci.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    encoding="utf-8",
+)
+logger = logging.getLogger("reci")
 
 
 # ─────────────────────────────────────────────
@@ -78,16 +92,40 @@ stats = RECIStatistics()
 UPLOAD_DIR = Path("images/api_uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+_MAX_UPLOADS = 50  # máximo de archivos que se conservan en disco
+
+def _limpiar_uploads() -> None:
+    """Mantiene solo los _MAX_UPLOADS archivos más recientes en UPLOAD_DIR."""
+    archivos = sorted(UPLOAD_DIR.glob("upload_*"), key=lambda p: p.stat().st_mtime)
+    sobrantes = len(archivos) - _MAX_UPLOADS
+    for archivo in archivos[:sobrantes]:
+        archivo.unlink(missing_ok=True)
+
 # ─────────────────────────────────────────────
 # DETECCIÓN AUTOMÁTICA DE MODO DE VISIÓN
-# Prioriza Teachable Machine si el modelo existe,
-# cae a Gemini automáticamente si no está disponible.
+# Prioriza flujo híbrido TM+Gemini si el modelo existe,
+# cae a Gemini solo si no está disponible.
 # ─────────────────────────────────────────────
 
 def _modelo_tm_disponible() -> bool:
     return Path("model/model.tflite").exists() and Path("model/labels.txt").exists()
 
-MODO_VISION = "teachable_machine" if _modelo_tm_disponible() else "gemini"
+# Cargar TM una sola vez al iniciar la API — evita recargar el modelo
+# en cada petición (4x más rápido en Raspberry Pi).
+tm_global = None
+if _modelo_tm_disponible():
+    try:
+        from vision.tm_classifier import TeachableMachineClassifier
+        tm_global = TeachableMachineClassifier()
+        MODO_VISION = "hibrido_tm_gemini"
+        logger.info("API iniciada | modo=HIBRIDO_TM_GEMINI")
+    except Exception as _e:
+        MODO_VISION = "gemini"
+        logger.warning("TM no disponible (%s) — modo=GEMINI", _e)
+else:
+    MODO_VISION = "gemini"
+    logger.info("API iniciada | modo=GEMINI")
+
 print(f"[RECI API] Modo de visión: {MODO_VISION.upper()}")
 
 
@@ -189,6 +227,9 @@ def clasificar_atributos(atributos: AtributosInput):
             reglas_disparadas = len(reglas)
         )
 
+        logger.info("clasificar_atributos | %s %.1f%% | objeto=%s",
+                    conclusion, confianza * 100, datos.get("objeto_reconocido"))
+
         backward = None
         if engine_global.resultado_backward:
             backward = {
@@ -215,6 +256,7 @@ def clasificar_atributos(atributos: AtributosInput):
         }
 
     except Exception as e:
+        logger.error("clasificar_atributos ERROR | %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -232,7 +274,9 @@ async def clasificar_imagen(file: UploadFile = File(...)):
     try:
         from vision.attribute_extractor import AttributeExtractor
 
-        # Guardar imagen temporalmente
+        # Limpiar uploads antiguos antes de guardar el nuevo
+        _limpiar_uploads()
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         extension = Path(file.filename).suffix or ".jpg"
         ruta_temp = UPLOAD_DIR / f"upload_{timestamp}{extension}"
@@ -242,16 +286,33 @@ async def clasificar_imagen(file: UploadFile = File(...)):
 
         extractor = AttributeExtractor()
 
-        # ── Selección automática de modo de visión ───────────────
-        if _modelo_tm_disponible():
-            # Producción: Teachable Machine
-            atributos  = extractor.analizar_imagen_tm(str(ruta_temp))
-            vision_usada = "teachable_machine"
+        # ── Flujo híbrido: TM da contexto → Gemini analiza → SE decide ──
+        vision_usada = MODO_VISION
+        if tm_global is not None:
+            # TM corre en ~0.1 s y pasa su voto como contexto a Gemini
+            try:
+                import cv2
+                img = cv2.imread(str(ruta_temp))
+                if img is not None:
+                    _, clase_tm, prob_tm = tm_global.analizar_frame(img)
+                else:
+                    clase_tm = prob_tm = None
+            except Exception as _te:
+                logger.warning("TM falló en API (%s) — Gemini sin contexto", _te)
+                clase_tm = prob_tm = None
+
+            try:
+                atributos    = extractor.analizar_imagen_hibrido(
+                    str(ruta_temp), clase_tm, prob_tm)
+                vision_usada = "hibrido_tm_gemini"
+            except Exception as _ge:
+                logger.warning("Gemini falló (%s) — fallback a TM", _ge)
+                atributos    = tm_global.analizar_imagen(str(ruta_temp))
+                vision_usada = "tm_fallback"
         else:
-            # Desarrollo: Gemini API
-            atributos  = extractor.analizar_imagen(str(ruta_temp))
+            atributos    = extractor.analizar_imagen(str(ruta_temp))
             vision_usada = "gemini"
-        # ────────────────────────────────────────────────────────
+        # ──────────────────────────────────────────────────────────────
 
         engine_global.cargar_hechos(atributos)
         conclusion, confianza, reglas = engine_global.ejecutar()
@@ -264,6 +325,9 @@ async def clasificar_imagen(file: UploadFile = File(...)):
             objeto_reconocido = atributos.get("objeto_reconocido"),
             reglas_disparadas = len(reglas)
         )
+
+        logger.info("clasificar_imagen | %s %.1f%% | vision=%s | archivo=%s",
+                    conclusion, confianza * 100, vision_usada, file.filename)
 
         backward = None
         if engine_global.resultado_backward:
@@ -293,6 +357,7 @@ async def clasificar_imagen(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+        logger.error("clasificar_imagen ERROR | %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

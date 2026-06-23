@@ -7,6 +7,7 @@
 import cv2
 import os
 import time
+import threading
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -98,6 +99,8 @@ class Camera:
         tiempo_resultado = None
         frame_capturado  = None
         ruta_analisis    = None
+        hilo_analisis    = None
+        resultado_hilo   = [None]
         progreso_texto   = ["Analizando imagen   ",
                             "Analizando imagen.  ",
                             "Analizando imagen.. ",
@@ -150,9 +153,19 @@ class Camera:
                     estado          = ANALIZANDO
                     progreso_idx    = 0
                     tiempo_progreso = ahora
-                    # El análisis corre en la siguiente iteración, DESPUÉS de
-                    # mostrar el frame "Analizando imagen..." — así el usuario
-                    # ve la pantalla de espera antes del bloqueo
+                    # Lanzar el análisis en un hilo separado para que la
+                    # barra de progreso animada no se congele mientras
+                    # Gemini / TM responden.
+                    if extractor:
+                        resultado_hilo = [None]
+                        def _run_analisis(ruta=ruta_analisis):
+                            resultado_hilo[0] = self._analizar(
+                                extractor, ruta, tm_classifier=tm_classifier)
+                        hilo_analisis = threading.Thread(
+                            target=_run_analisis, daemon=True)
+                        hilo_analisis.start()
+                    else:
+                        hilo_analisis = None
 
             # ── ANALIZANDO ────────────────────────────────────────
             elif estado == ANALIZANDO:
@@ -182,6 +195,17 @@ class Camera:
                              (100 + barra_fill, h//2 + 60),
                              (0, 255, 255), -1)
 
+                # Transición a RESULTADO cuando el hilo termine
+                if hilo_analisis is not None and not hilo_analisis.is_alive():
+                    ultimo_resultado = resultado_hilo[0]
+                    estado           = RESULTADO
+                    tiempo_resultado = time.time()
+                    hilo_analisis    = None
+                elif hilo_analisis is None:
+                    # Sin extractor — pasar directamente
+                    estado           = RESULTADO
+                    tiempo_resultado = time.time()
+
             # ── RESULTADO ─────────────────────────────────────────
             elif estado == RESULTADO:
                 if frame_capturado is not None:
@@ -205,15 +229,6 @@ class Camera:
 
             key = cv2.waitKey(1) & 0xFF
 
-            # ── Análisis: corre después de mostrar "Analizando imagen..." ──
-            if estado == ANALIZANDO and ruta_analisis:
-                if extractor:
-                    print("\n  🔍 Analizando objeto...")
-                    ultimo_resultado = self._analizar(
-                        extractor, ruta_analisis, tm_classifier=tm_classifier)
-                ruta_analisis    = None
-                estado           = RESULTADO
-                tiempo_resultado = time.time()
 
             if key == ord('q') or key == ord('Q'):
                 print("  👋 Saliendo...")

@@ -13,8 +13,11 @@
 import os
 import json
 import base64
+import logging
 import httpx
 from pathlib import Path
+
+logger = logging.getLogger("reci")
 
 
 class AttributeExtractor:
@@ -31,6 +34,14 @@ class AttributeExtractor:
         "https://generativelanguage.googleapis.com/v1beta/models"
         "/gemini-2.5-flash:generateContent"
     )
+
+    # Le indica a Gemini que devuelva JSON puro, sin markdown ni explicaciones.
+    _GENERATION_CONFIG = {
+        "temperature":      0.1,
+        "topP":             0.8,
+        "maxOutputTokens":  256,
+        "responseMimeType": "application/json",
+    }
 
     PROMPT_BASE = """Eres el módulo de visión del sistema experto RECI, un tacho inteligente de reciclaje universitario en Ecuador.
 
@@ -102,6 +113,28 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 "Agrega GEMINI_API_KEY=tu_key en el archivo .env"
             )
 
+    @staticmethod
+    def _parsear_json(texto: str) -> dict:
+        """
+        Parsea la respuesta de Gemini.
+        Con responseMimeType='application/json' llega limpio; este método
+        sirve de fallback por si alguna versión del modelo agrega markdown.
+        """
+        try:
+            return json.loads(texto)
+        except json.JSONDecodeError:
+            # Fallback: extraer bloque JSON entre llaves
+            if "```" in texto:
+                for parte in texto.split("```"):
+                    if "{" in parte:
+                        texto = parte.lstrip("json").strip()
+                        break
+            inicio = texto.find("{")
+            fin    = texto.rfind("}") + 1
+            if inicio != -1 and fin > inicio:
+                return json.loads(texto[inicio:fin])
+            raise
+
     def _imagen_a_base64(self, ruta_imagen: str) -> tuple:
         """Convierte imagen a base64 y detecta el tipo MIME."""
         ruta = Path(ruta_imagen)
@@ -139,41 +172,18 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     }
                 ]
             }],
-            "generationConfig": {
-                "temperature":     0.1,
-                "topP":            0.8,
-                "maxOutputTokens": 2048
-            }
+            "generationConfig": self._GENERATION_CONFIG,
         }
 
         url = f"{self.GEMINI_URL}?key={self.api_key}"
         response = httpx.post(url, json=payload, timeout=60.0)
         response.raise_for_status()
-        data = response.json()
+        data  = response.json()
+        texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-        texto = data["candidates"][0]["content"]["parts"][0]["text"]
-        texto = texto.strip()
-
-        # Limpiar markdown si Gemini lo agrega
-        if "```" in texto:
-            partes = texto.split("```")
-            for parte in partes:
-                if "{" in parte:
-                    texto = parte
-                    if texto.startswith("json"):
-                        texto = texto[4:]
-                    break
-
-        # Extraer solo el JSON entre llaves
-        inicio = texto.find("{")
-        fin    = texto.rfind("}") + 1
-        if inicio != -1 and fin > inicio:
-            texto = texto[inicio:fin]
-
-        texto = texto.strip()
-        print(f"  📝 Respuesta Gemini: {texto}")
-
-        atributos = json.loads(texto)
+        atributos = self._parsear_json(texto)
+        logger.info("analizar_imagen OK | objeto=%s confianza=%s",
+                    atributos.get("objeto_reconocido"), atributos.get("confianza_ml"))
         print(f"  ✅ Atributos extraídos: {atributos}")
         return atributos
 
@@ -241,33 +251,18 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     }
                 ]
             }],
-            "generationConfig": {
-                "temperature":     0.1,
-                "topP":            0.8,
-                "maxOutputTokens": 2048
-            }
+            "generationConfig": self._GENERATION_CONFIG,
         }
 
         url      = f"{self.GEMINI_URL}?key={self.api_key}"
         response = httpx.post(url, json=payload, timeout=60.0)
         response.raise_for_status()
-        data     = response.json()
-
+        data  = response.json()
         texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-        # Limpiar markdown si Gemini lo agrega
-        if "```" in texto:
-            for parte in texto.split("```"):
-                if "{" in parte:
-                    texto = parte.lstrip("json").strip()
-                    break
-
-        inicio = texto.find("{")
-        fin    = texto.rfind("}") + 1
-        if inicio != -1 and fin > inicio:
-            texto = texto[inicio:fin]
-
-        atributos = json.loads(texto.strip())
+        atributos = self._parsear_json(texto)
+        logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → gemini=%s",
+                    clase_tm, (prob_tm or 0) * 100, atributos.get("objeto_reconocido"))
         print(f"  ✅ Gemini → {atributos.get('objeto_reconocido')} "
               f"(confianza: {atributos.get('confianza_ml')})")
         return atributos
