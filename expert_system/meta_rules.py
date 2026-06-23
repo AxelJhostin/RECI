@@ -285,6 +285,28 @@ class MetaRuleEngine:
             })
         ))
 
+        # ── MR16: Verde oscuro + brillo nítido → señal exclusiva de vidrio ──
+        # El color verde_oscuro con brillo alto_nitido es prácticamente imposible
+        # en plástico de consumo: el PET verde produce brillo difuso, no nítido.
+        # Esta combinación la producen únicamente botellas de vidrio (Club, Güitig
+        # verde, cerveza artesanal). Se activa aunque confianza ML sea baja,
+        # ya que la señal visual es más fiable que el clasificador en este caso.
+        self.meta_reglas.append(MetaRule(
+            nombre="MR16",
+            prioridad=10,
+            descripcion="Verde oscuro + brillo nítido → patrón exclusivo de vidrio, priorizar sobre todo",
+            condicion=lambda hechos, ctx: (
+                hechos.get("color") == "verde_oscuro" and
+                hechos.get("brillo") == "alto_nitido"
+            ),
+            accion=lambda hechos, ctx: ctx.update({
+                "priorizar_categoria": "VIDRIO",
+                "factor_prioridad": 1.12,
+                "excluir_categorias": ctx.get("excluir_categorias", []) + ["PLASTICO", "LATA", "ORGANICO"],
+                "nota": "MR16: Verde oscuro con brillo nítido → señal exclusiva de vidrio, PLASTICO/LATA/ORGANICO excluidos"
+            })
+        ))
+
         # Ordenar por prioridad descendente
         self.meta_reglas.sort(key=lambda mr: mr.prioridad, reverse=True)
 

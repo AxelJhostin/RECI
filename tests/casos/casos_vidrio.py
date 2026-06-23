@@ -134,4 +134,46 @@ CASOS_VIDRIO = [
             "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
         }
     },
+
+    # ── Nuevos casos: vidrio sin tapa visible (R161–R164 + MR16) ─────────
+    {
+        "id": "T54", "nombre": "Club verde sin tapa visible — baja confianza ML",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "baja",
+            "transparencia": "ninguna", "color": "verde_oscuro",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T55", "nombre": "Güitig verde sin tapa — confianza media",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "verde_oscuro",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T56", "nombre": "Botella vidrio con etiqueta colorida que oculta transparencia",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "baja", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T57", "nombre": "Frasco de salsa ámbar sin tapa visible",
+        "esperado": "VIDRIO", "categoria": "VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "desconocido", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "ambar",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
 ]

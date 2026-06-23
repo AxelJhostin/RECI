@@ -65,8 +65,16 @@ class InferenceEngine:
             if regla.evaluar(hechos):
                 self.reglas_disparadas.append(regla)
 
+        # Señal visual fuerte de vidrio (MR16): verde_oscuro + brillo nítido
+        # excluye plástico — en ese caso no forzar DESCONOCIDO aunque ML sea baja.
+        senal_visual_vidrio_fuerte = (
+            self.contexto_meta.get("priorizar_categoria") == "VIDRIO" and
+            "PLASTICO" in self.contexto_meta.get("excluir_categorias", [])
+        )
+
         if (hechos.get("confianza_ml") == "baja" and
-                hechos.get("objeto_reconocido") == "desconocido"):
+                hechos.get("objeto_reconocido") == "desconocido" and
+                not senal_visual_vidrio_fuerte):
             self.conclusion_final = "DESCONOCIDO"
             self.confianza_final  = 0.0
 

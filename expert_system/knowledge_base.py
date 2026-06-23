@@ -753,6 +753,42 @@ class KnowledgeBase:
                           "brillo": "medio_difuso", "transparencia": "ninguna"},
                  "PLASTICO", 0.91,
                  "Cilíndrico muy delgado rígido opaco sin tapa → pitillo de color o sorbete plástico"),
+
+            # ── Vidrio verde oscuro sin tapa visible ─────────────────────────
+            # Cubre botellas Club, Güitig verde, cerveza artesanal verde cuando
+            # la tapa ya fue retirada o Gemini no la detecta.
+            # verde_oscuro + alto_nitido es exclusivo del vidrio — el plástico verde
+            # nunca produce ese reflejo nítido tan profundo.
+            Rule("R161", {"color": "verde_oscuro", "brillo": "alto_nitido",
+                          "rigidez": "rigido", "tapa": "sin_tapa"},
+                 "VIDRIO", 0.90,
+                 "Verde oscuro muy brillante y rígido sin tapa → botella de vidrio verde (Club/Güitig) sin tapa visible"),
+
+            Rule("R162", {"color": "verde_oscuro", "brillo": "alto_nitido",
+                          "rigidez": "rigido", "tapa": "sin_tapa",
+                          "forma": "cilindrica_estandar"},
+                 "VIDRIO", 0.94,
+                 "Verde oscuro brillante cilíndrico rígido sin tapa → botella vidrio verde estándar, tapa ausente"),
+
+            # ── Botella vidrio con etiqueta colorida que oculta transparencia ─
+            # Cuando la etiqueta cubre gran parte del vidrio, Gemini reporta
+            # color variado_vivo y transparencia baja/ninguna, pero el brillo
+            # nítido del vidrio sigue siendo detectado. El plástico con etiqueta
+            # tiene brillo medio_difuso, nunca alto_nitido en la superficie.
+            Rule("R163", {"color": "variado_vivo", "brillo": "alto_nitido",
+                          "rigidez": "rigido", "tapa": "sin_tapa",
+                          "forma": "cilindrica_estandar"},
+                 "VIDRIO", 0.88,
+                 "Colorido brillante nítido cilíndrico rígido sin tapa → botella de vidrio con etiqueta, tapa ausente"),
+
+            # ── Vidrio ámbar o marrón sin tapa y confianza media ─────────────
+            # Botellas de salsas, condimentos o jugos en vidrio oscuro.
+            # La combinación ámbar + alto_nitido + rigido es inequívoca de vidrio.
+            Rule("R164", {"color": "ambar", "brillo": "alto_nitido",
+                          "rigidez": "rigido", "tapa": "sin_tapa",
+                          "transparencia": "ninguna"},
+                 "VIDRIO", 0.91,
+                 "Ámbar opaco nítido rígido sin tapa → frasco de vidrio ámbar (salsa, condimento) sin tapa visible"),
         ]
 
     def obtener_reglas(self):

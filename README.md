@@ -115,7 +115,7 @@ Sin compuerta       → RECHAZADO→ servo 0°   → LED rojo  → mensaje audio
 ```
 RECI/
 ├── expert_system/
-│   ├── knowledge_base.py       # 170 reglas IF-THEN en 5 niveles + atributos válidos
+│   ├── knowledge_base.py       # 174 reglas IF-THEN en 5 niveles + atributos válidos
 │   ├── inference_engine.py     # Motor principal: forward chaining, CF MYCIN, meta-reglas
 │   ├── working_memory.py       # Memoria de trabajo — hechos activos por ciclo de inferencia
 │   ├── backward_chaining.py    # Encadenamiento hacia atrás — verificación de hipótesis
@@ -372,7 +372,7 @@ Estos son los datos que el modelo ML extrae de la imagen y que el sistema expert
 
 ```
 InferenceEngine
-    ├── KnowledgeBase          → 170 reglas IF-THEN
+    ├── KnowledgeBase          → 174 reglas IF-THEN
     ├── WorkingMemory          → hechos activos del ciclo actual
     ├── AttributeValidator     → valida los 9 atributos antes de inferir
     ├── MetaRuleEngine         → 12 meta-reglas (ajustan EL CÓMO razonar)
@@ -387,14 +387,14 @@ InferenceEngine
 ```
 1. cargar_hechos()    → validar + cargar atributos en WorkingMemory
 2. MetaRuleEngine     → 12 meta-reglas ajustan el contexto de razonamiento
-3. Forward chaining   → evaluar las 170 reglas contra los hechos actuales
+3. Forward chaining   → evaluar las 174 reglas contra los hechos actuales
 4. CF MYCIN           → combinar evidencia de las reglas disparadas por categoría
 5. Ajustes meta       → aplicar exclusiones, prioridades y sesgos del contexto
 6. BackwardChaining   → verificar la conclusión desde los hechos hacia atrás
 7. decision_hardware()→ traducir conclusión a ángulo servo + LED + mensaje
 ```
 
-### Niveles de reglas (170 reglas)
+### Niveles de reglas (174 reglas)
 
 | Nivel | Cantidad | Descripción |
 |---|---|---|
@@ -1065,6 +1065,30 @@ uvicorn api.app:app --reload --port 8000
 
 ## Changelog — historial de cambios
 
+### Junio 2026 — v2.4 (robustez de vidrio sin tapa: nuevas reglas + MR16)
+
+**`expert_system/knowledge_base.py`**
+- +4 reglas de VIDRIO (R161–R164) para cubrir botellas y frascos sin tapa visible:
+  - **R161/R162**: `verde_oscuro + alto_nitido + rigido + sin_tapa` → botella Club/Güitig sin tapa.
+  - **R163**: `variado_vivo + alto_nitido + cilindrica_estandar + rigido + sin_tapa` → vidrio con etiqueta colorida.
+  - **R164**: `ambar + alto_nitido + rigido + sin_tapa + ninguna transparencia` → frasco de salsa/condimento.
+- Total: **174 reglas**.
+
+**`expert_system/meta_rules.py`**
+- **MR16** (prioridad 10): `verde_oscuro + brillo alto_nitido` → señal exclusiva de vidrio. Prioriza VIDRIO ×1.12 y excluye PLÁSTICO/LATA/ORGÁNICO. Es la única combinación color+brillo que no puede ser plástico de consumo.
+- Total: **16 meta-reglas**.
+
+**`expert_system/inference_engine.py`**
+- Añadida condición `senal_visual_vidrio_fuerte` al bloqueo conservador de baja confianza:
+  cuando MR16 activa (`priorizar_categoria=VIDRIO` + `PLASTICO` excluido), el motor no fuerza
+  DESCONOCIDO aunque `confianza_ml=baja`, permitiendo que los atributos visuales ganen.
+
+**`tests/casos/casos_vidrio.py`**
+- 4 nuevos casos (T54–T57): Club verde baja confianza, Güitig verde, vidrio con etiqueta, frasco ámbar.
+- Total: **108/108 tests aprobados**.
+
+---
+
 ### Junio 2026 — v2.3 (corto plazo: snacks, cubiertos, pitillos + dashboard de estadísticas)
 
 **`expert_system/knowledge_base.py`**
@@ -1163,4 +1187,4 @@ uvicorn api.app:app --reload --port 8000
 
 ---
 
-*Última actualización: Junio 2026 — v2.3 · Sistema experto 170 reglas · 15 meta-reglas · 34 objetos reconocidos · 104/104 tests · Dashboard de estadísticas*
+*Última actualización: Junio 2026 — v2.4 · Sistema experto 174 reglas · 16 meta-reglas · 34 objetos reconocidos · 108/108 tests · Dashboard de estadísticas*
