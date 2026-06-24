@@ -34,14 +34,14 @@
 
 RECI es un **robot físico de reciclaje inteligente** diseñado para operar dentro del campus de la PUCE Sede Manabí. Es una plataforma rodante con dos compartimentos (vidrio / plástico) que, mediante visión artificial y un sistema experto, identifica el tipo de residuo que se deposita y abre únicamente la compuerta correcta.
 
-**El sistema acepta únicamente plástico y vidrio.** Cualquier otro objeto es rechazado con mensaje al usuario.
+**El sistema acepta únicamente plástico y vidrio.** Cualquier otro material (lata, metal, papel, cartón, orgánico, etc.) se rechaza con el mensaje **"Material no permitido — depositar en tacho general"** (LED rojo, compuerta cerrada).
 
 ### Subsistemas
 
 | Subsistema | Descripción |
 |---|---|
 | **RECI Físico** | Plataforma rodante con 2 compartimentos, servo, sensores ultrasónicos, LEDs WS2812, pantalla OLED, audio, ESP32 |
-| **RECI IA** | Módulo de visión (MobileNetV2 + Gemini) + sistema experto Python corriendo en Raspberry Pi 4 |
+| **RECI IA** | Módulo de visión (MobileNetV2 + Claude/Gemini) + sistema experto Python corriendo en Raspberry Pi 4 |
 | **RECI Cloud** | Backend FastAPI + Supabase/PostgreSQL + dashboard admin Next.js |
 | **RECI App** | Aplicación móvil (Next.js PWA o Flutter) con mapa en tiempo real, llamada al robot, sistema de recompensas |
 
@@ -64,24 +64,27 @@ Cámara captura imagen 1280×720 px
             ↓
 MobileNetV2 (.tflite) — ~0.1 seg
 Detecta clase (plastico/vidrio) + confianza
-Da su "voto" como contexto para Gemini
+Da su "voto" como contexto para la API de visión
             ↓
-Gemini 2.5 Flash API — ~2 seg
+Claude Haiku / Gemini — ~2 seg
 Analiza la imagen visualmente con el contexto del TM
 Extrae los 9 atributos del objeto real
 (puede identificar papel, lata, cartón, etc.)
             ↓
+Refinamiento OpenCV (refinar_atributos_api)
+Corrige latas, metal y vidrio mal etiquetados por la API
+            ↓
   9 atributos visuales listos
           ↓
   Sistema Experto RECI
-  (113 reglas · 12 meta-reglas · forward + backward chaining · CF MYCIN)
+  (174 reglas · 16 meta-reglas · forward + backward chaining · CF MYCIN)
           ↓
   Conclusión: VIDRIO | PLÁSTICO | DESCONOCIDO | LATA | ORGÁNICO
           ↓
   Controlador físico ejecuta la acción:
   VIDRIO    → abre compuerta izquierda + LED azul
   PLASTICO  → abre compuerta derecha   + LED verde
-  RECHAZADO → no abre nada             + LED rojo + mensaje
+  RECHAZADO → no abre nada             + LED rojo + "Material no permitido"
           ↓
   Evento enviado al backend en nube (FastAPI + Supabase)
           ↓
@@ -93,7 +96,7 @@ Extrae los 9 atributos del objeto real
 | Capa | Componente | Tecnología |
 |---|---|---|
 | Percepción | Cámara + MobileNetV2 | TensorFlow Lite, Python, Raspberry Pi 4 |
-| IA / Experto | Motor de inferencia + 113 reglas IF-THEN | Python handcrafted (sin librerías de SE externas) |
+| IA / Experto | Motor de inferencia + 174 reglas IF-THEN | Python handcrafted (sin librerías de SE externas) |
 | Control físico | Servomotores + sensores + cámara + LEDs + actuadores | Microcontrolador / placa (por definir) |
 | Comunicación local | Controlador IA ↔ controlador físico | Protocolo por definir según hardware final |
 | Backend / Nube | API REST + base de datos + eventos | FastAPI + Supabase (PostgreSQL) + Vercel |
@@ -105,7 +108,7 @@ Extrae los 9 atributos del objeto real
 ```
 Compuerta izquierda → VIDRIO   → servo 45°  → LED azul
 Compuerta derecha   → PLÁSTICO → servo 135° → LED verde
-Sin compuerta       → RECHAZADO→ servo 0°   → LED rojo  → mensaje audio + OLED
+Sin compuerta       → RECHAZADO→ servo 0°   → LED rojo  → "Material no permitido" + audio/OLED
 ```
 
 ---
@@ -120,23 +123,31 @@ RECI/
 │   ├── working_memory.py       # Memoria de trabajo — hechos activos por ciclo de inferencia
 │   ├── backward_chaining.py    # Encadenamiento hacia atrás — verificación de hipótesis
 │   ├── certainty_factor.py     # Factor de Certeza estilo MYCIN (fórmula de combinación)
-│   ├── meta_rules.py           # 12 meta-reglas que ajustan el razonamiento
+│   ├── meta_rules.py           # 16 meta-reglas que ajustan el razonamiento
 │   ├── validator.py            # Validador de atributos antes de inferir
 │   ├── statistics.py           # Estadísticas de sesión + payload para Supabase
 │   └── explanation.py          # Reporte técnico completo exportable a JSON
 │
 ├── vision/
 │   ├── tm_classifier.py        # Clasificador MobileNetV2 (.tflite) — módulo principal
-│   ├── attribute_extractor.py  # Extractor Gemini API + fallback TM+heurísticas
-│   ├── visual_heuristics.py    # Análisis OpenCV cuando Gemini no está disponible
+│   ├── attribute_extractor.py  # Extractor Claude/Gemini + fallback TM+heurísticas
+│   ├── visual_heuristics.py    # refinar_atributos() + refinar_atributos_api() (OpenCV)
 │   └── camera.py               # Captura en tiempo real — modo demo (ESPACIO) + producción
+│
+├── docs/
+│   └── FLUJO_RECONOCIMIENTO.md # Diagrama completo, costos API y checklist de demo
+│
+├── scripts/
+│   └── estimar_costo_gemini.py # Estimador de costo por imagen (Gemini)
 │
 ├── api/
 │   ├── __init__.py
 │   └── app.py                  # FastAPI — 8 endpoints REST, motor de inferencia compartido
 │
 ├── tests/
-│   ├── test_cases.py             # Runner principal — 74 pruebas formales
+│   ├── test_cases.py             # Runner principal — 110 pruebas formales
+│   ├── test_imagenes_completo.py # 16 imágenes reales — flujo TM + API + SE
+│   ├── test_refinar_api.py       # Pruebas unitarias de refinamiento lata/vidrio/PET
 │   ├── test_backward_chaining.py # Pruebas dedicadas a los goals de backward chaining
 │   └── casos/
 │       ├── __init__.py
@@ -145,7 +156,7 @@ RECI/
 │       ├── casos_ambiguos.py   # 10 casos difíciles (PET vs vidrio)
 │       ├── casos_extremos.py   # 4 casos extremos (baja confianza, desconocidos)
 │       ├── casos_campus.py     # 26 casos con objetos reales del campus PUCE Manabí
-│       └── casos_lata.py       # 7 casos de LATA y bordes con vidrio/plástico
+│       └── casos_lata.py       # 11 casos de LATA y bordes con vidrio/plástico
 │
 ├── model/                      # Modelo entrenado — NO está en el repo (ver instalación)
 │   ├── model.tflite            # MobileNetV2 entrenado (99.7% precisión) — descargar aparte
@@ -164,7 +175,8 @@ RECI/
 ├── main.py                     # Punto de entrada principal — demo completo en consola
 ├── tomar_fotos.py              # Recolector de fotos con modo ráfaga automática
 ├── requirements.txt            # Dependencias Python del proyecto
-├── .env                        # Variables de entorno — NO subir a GitHub
+├── .env                        # Variables de entorno — NO subir a GitHub (gitignoreado)
+├── .env.example                # Plantilla: VISION_API, Claude, Gemini
 └── .gitignore
 ```
 
@@ -176,7 +188,7 @@ RECI/
 
 - Python 3.9 o superior
 - Cámara (integrada en laptop, módulo USB, o módulo Raspberry Pi Camera)
-- Cuenta Google (para Gemini API y Google Colab)
+- Cuenta Anthropic o Google (para Claude/Gemini API) y Google Colab (para reentrenar el modelo)
 
 ### 1. Clonar e instalar dependencias
 
@@ -194,7 +206,7 @@ pip3 install -r requirements.txt
 | uvicorn | ≥ 0.39.0 | Servidor ASGI |
 | opencv-python | ≥ 4.13.0 | Captura de cámara y procesamiento de imagen |
 | tensorflow | ≥ 2.20.0 | Cargar y ejecutar el modelo .tflite |
-| httpx | ≥ 0.28.0 | Llamadas async a la API de Gemini |
+| httpx | ≥ 0.28.0 | Llamadas HTTP a Claude y Gemini |
 | pydantic | ≥ 2.13.0 | Validación de datos en la API |
 | python-dotenv | ≥ 1.2.0 | Leer variables de entorno desde .env |
 | numpy | ≥ 2.0.0 | Operaciones con arrays de imagen |
@@ -206,16 +218,32 @@ pip3 install -r requirements.txt
 
 ### 2. Configurar variables de entorno
 
-Crear archivo `.env` en la raíz del proyecto:
+Crear archivo `.env` en la raíz del proyecto (copiar desde `.env.example`):
 
+```bash
+cp .env.example .env
 ```
+
+**Opción recomendada — Claude Haiku (demo):**
+
+```bash
+VISION_API=claude
+ANTHROPIC_API_KEY=tu_api_key_aqui
+CLAUDE_MODEL=claude-haiku-4-5
+```
+
+Obtener API key en: https://console.anthropic.com/ (mínimo de recarga ~$5)
+
+**Alternativa — Gemini:**
+
+```bash
+VISION_API=gemini
 GEMINI_API_KEY=tu_api_key_aqui
 ```
 
 Obtener API key gratuita en: https://aistudio.google.com/apikey
 
-> Si no tienes API key de Gemini, el sistema funciona igualmente usando solo el modelo TFLite.
-> Con la API configurada, Gemini **siempre** analiza la imagen visualmente (no solo como fallback) — ver sección [Flujo de visión híbrido](#flujo-de-visión-híbrido).
+> Si no hay API key, el sistema funciona con **TM + heurísticas OpenCV** (`refinar_atributos` + `refinar_atributos_api`). Con API configurada, Claude/Gemini **siempre** analiza la imagen visualmente (no solo como fallback) — ver [Flujo de visión híbrido](#flujo-de-visión-híbrido).
 
 ### 3. Obtener el modelo entrenado
 
@@ -232,24 +260,32 @@ cp ~/Downloads/labels.txt   model/labels.txt
 **Opción B — Entrenar el modelo desde cero:**
 Ver sección [Reentrenar el modelo](#reentrenar-el-modelo).
 
-**Opción C — Sin modelo (solo Gemini):**
-Si no hay `model/model.tflite`, el sistema detecta su ausencia y usa Gemini automáticamente. No se necesita hacer nada adicional.
+**Opción C — Sin modelo (solo API de visión):**
+Si no hay `model/model.tflite`, el sistema detecta su ausencia y usa Claude/Gemini automáticamente. No se necesita hacer nada adicional.
 
 ### 4. Verificar la instalación
 
 ```bash
 # Verificar sistema experto (sin hardware, sin internet)
 python3 tests/test_cases.py
-# Resultado esperado: 74/74 pruebas aprobadas (100%)
+# Resultado esperado: 110/110 pruebas aprobadas (100%)
+
+# Verificar refinamiento OpenCV post-API
+python3 tests/test_refinar_api.py
+# Resultado esperado: 5/5 pruebas aprobadas (100%)
 
 # Verificar goals de backward chaining
 python3 tests/test_backward_chaining.py
 # Resultado esperado: 6/6 pruebas aprobadas (100%)
 
+# Verificar flujo completo con 16 imágenes reales
+python3 tests/test_imagenes_completo.py
+# Resultado esperado: 16/16 imágenes aprobadas (100%)
+
 # Verificar API REST
 uvicorn api.app:app --reload --port 8000
 # Abrir en navegador: http://localhost:8000/health
-# Debe responder: {"status": "ok", "total_reglas": 113, ...}
+# Debe responder: {"status": "ok", "total_reglas": 174, ...}
 ```
 
 ---
@@ -285,7 +321,7 @@ python3 main.py
 
 ### ¿Qué hace el sistema experto?
 
-Recibe un diccionario de **9 atributos visuales** (extraídos por el modelo ML o por Gemini) y razona usando reglas IF-THEN para determinar si el objeto es VIDRIO, PLÁSTICO, o no permitido. Es la "inteligencia" del sistema que toma la decisión final.
+Recibe un diccionario de **9 atributos visuales** (extraídos por Claude/Gemini o por TM + heurísticas OpenCV) y razona usando reglas IF-THEN para determinar si el objeto es VIDRIO, PLÁSTICO, o no permitido. Es la "inteligencia" del sistema que toma la decisión final.
 
 ### Uso básico
 
@@ -580,41 +616,44 @@ python3 tests/test_cases.py
 
 ## Flujo de visión híbrido
 
-> **Documento completo:** [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md) — diagrama, payload exacto a Gemini, costos y checklist de demo.
+> **Documento completo:** [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md) — diagrama, payload exacto a Claude/Gemini, costos y checklist de demo.
 
 ```
 Cámara captura imagen (1280×720 px)
         ↓
 MobileNetV2 (.tflite) — ~0.1 seg         ← siempre corre primero
 Clasifica entre plastico/vidrio
-Solo pasa a Gemini: clase + % (NO los 9 atributos del MAPA)
+Solo pasa a la API: clase + % (NO los 9 atributos del MAPA)
         ↓
-Gemini 2.5 Flash API — ~2 seg             ← siempre se ejecuta si hay API key
+Claude Haiku / Gemini — ~2 seg            ← siempre se ejecuta si hay API key
 Imagen JPG completa (base64) + prompt + contexto TM
 Devuelve JSON con 9 atributos visuales
-        ↓ (si Gemini falla 429/503)
-TM + heurísticas OpenCV — ~0.1 seg        ← fallback automático (16/16 imágenes OK)
+        ↓
+refinar_atributos_api() — OpenCV         ← corrige latas, metal y vidrio mal etiquetados
+        ↓ (si la API falla 404/429/503)
+TM + refinar_atributos() + refinar_atributos_api()  ← fallback automático (16/16 OK)
         ↓
 9 atributos → Sistema Experto (174 reglas) → Decisión final → Hardware
 ```
 
-### Costo Gemini (estimado)
+### Costo API (estimado)
 
-| Por foto | 100 fotos | 500 fotos | 2000 fotos |
-|----------|-----------|-----------|------------|
-| ~$0.0009 (~0.09¢) | ~$0.09 | ~$0.46 | ~$1.85 |
+| Proveedor | Por foto | 100 fotos | 500 fotos |
+|-----------|----------|-----------|-----------|
+| **Claude Haiku** (recomendado) | ~$0.001–0.002 | ~$0.10–0.20 | ~$0.50–1.00 |
+| Gemini 2.5 Flash | ~$0.0009 | ~$0.09 | ~$0.46 |
 
-Recalcular con tus imágenes: `python3 scripts/estimar_costo_gemini.py`
+Recalcular Gemini: `python3 scripts/estimar_costo_gemini.py`
 
-Configuración demo: copiar `env.example` → `.env` y pegar `GEMINI_API_KEY`. Vincular billing en [AI Studio](https://aistudio.google.com/) con tope de **$5**.
+Configuración demo: copiar `.env.example` → `.env`, definir `VISION_API=claude` y `ANTHROPIC_API_KEY`. Para Gemini, vincular billing en [AI Studio](https://aistudio.google.com/) con tope de **$5**.
 
-**¿Por qué Gemini siempre actúa y no solo como fallback?**
+**¿Por qué la API siempre actúa y no solo como fallback?**
 
-El modelo TFLite solo conoce 2 clases: `plastico` y `vidrio`. Siempre elige una de las dos, incluso si el objeto es papel, una lata o cartón — y puede hacerlo con 100% de confianza aunque esté equivocado. Gemini ve la imagen real y puede identificar correctamente cualquier objeto, usando el voto del TM como referencia inicial pero sin estar limitado a esas dos clases.
+El modelo TFLite solo conoce 2 clases: `plastico` y `vidrio`. Siempre elige una de las dos, incluso si el objeto es papel, una lata o cartón — y puede hacerlo con 100% de confianza aunque esté equivocado. Claude/Gemini ve la imagen real y puede identificar correctamente cualquier objeto, usando el voto del TM como referencia inicial pero sin estar limitado a esas dos clases.
 
-Esto permite que el sistema experto produzca `DESCONOCIDO` (tacho general) para objetos que no son plástico ni vidrio, cumpliendo el alcance del proyecto.
+Esto permite que el sistema experto produzca `DESCONOCIDO` o `LATA` (tacho general) para objetos que no son plástico ni vidrio, cumpliendo el alcance del proyecto.
 
-**¿Qué envía exactamente el TM a Gemini?**
+**¿Qué envía exactamente el TM a la API?**
 
 Solo **2 líneas de texto** insertadas en el prompt (no la imagen procesada ni el MAPA_CLASES):
 
@@ -630,17 +669,21 @@ Detalle completo y diagrama Mermaid: [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO
 
 **Respuesta JSON estructurada:**
 
-Gemini recibe la instrucción `responseMimeType: application/json`, por lo que devuelve JSON puro directamente, sin texto extra ni markdown. Esto lo hace más confiable y rápido de parsear.
+Claude y Gemini devuelven JSON con los 9 atributos. Gemini usa `responseMimeType: application/json` para respuesta JSON pura sin markdown.
 
-**Fallback automático si Gemini no está disponible:**
+**Refinamiento OpenCV post-API (`refinar_atributos_api`):**
 
-Si Gemini falla (429 cuota, 503 saturado, timeout), el sistema usa **TM + heurísticas OpenCV** (`visual_heuristics.py`) sin interrumpir la demo. Precisión medida: **16/16** imágenes de prueba sin API.
+Tras la respuesta de Claude/Gemini, OpenCV corrige errores frecuentes: latas/metal etiquetados como plástico, PET confundido con vidrio, botellas ámbar mal clasificadas. También corre en el fallback TM.
+
+**Fallback automático si la API no está disponible:**
+
+Si Claude/Gemini falla (404 modelo incorrecto, 429 cuota, 503 saturado, timeout), el sistema usa **TM + heurísticas OpenCV** (`refinar_atributos` + `refinar_atributos_api`) sin interrumpir la demo. Precisión medida: **16/16** imágenes de prueba sin API.
 
 1. **Dentro de `analizar_y_clasificar_hibrido()`** — cámara, API y tests.
-2. **Cache de sesión** — tras el primer fallo, no reintenta Gemini en cada foto (más rápido).
+2. **Cache de sesión** — tras el primer fallo, no reintenta la API en cada foto (más rápido).
 
 **Tiempo total por clasificación:**
-- Flujo híbrido TM + Gemini: ~2–5 seg
+- Flujo híbrido TM + Claude/Gemini: ~2–3 seg
 - Fallback TM + heurísticas: ~0.1–0.3 seg
 
 ### Modo demo — cámara en tiempo real
@@ -651,7 +694,7 @@ La ventana de cámara tiene 4 estados secuenciales:
 |---|---|
 | **PREVIEW** | Cámara en vivo — colocar el objeto frente a la cámara |
 | **COUNTDOWN** | Cuenta regresiva de 1 segundo — mantener el objeto quieto |
-| **ANALIZANDO** | Pantalla oscura con barra de progreso animada real — TM + Gemini corren en hilo separado mientras la animación se mueve |
+| **ANALIZANDO** | Pantalla oscura con barra de progreso animada real — TM + API corren en hilo separado mientras la animación se mueve |
 | **RESULTADO** | Clasificación mostrada 5 segundos con destino, confianza y barra de color |
 
 **Controles:**
@@ -683,11 +726,11 @@ Documentación interactiva (Swagger): `http://localhost:8000/docs`
 
 | Endpoint | Método | Descripción |
 |---|---|---|
-| `/` | GET | Info general + modo de visión activo (TM o Gemini) |
+| `/` | GET | Info general + modo de visión activo (Claude, Gemini o TM) |
 | `/health` | GET | Estado del sistema: reglas cargadas, modo visión, modelo TM disponible |
 | `/reglas` | GET | Total y distribución de reglas por categoría |
 | `/clasificar/atributos` | POST | Clasificar enviando los 9 atributos en JSON (usa el Raspberry Pi en producción) |
-| `/clasificar/imagen` | POST | Clasificar desde una imagen (TM o Gemini automático según disponibilidad) |
+| `/clasificar/imagen` | POST | Clasificar desde una imagen (flujo híbrido TM + Claude/Gemini) |
 | `/estadisticas` | GET | Estadísticas de la sesión para el dashboard |
 | `/historial` | GET | Historial de clasificaciones (`?limite=20`) |
 | `/reset` | POST | Resetear estadísticas de la sesión |
@@ -745,7 +788,7 @@ Documentación interactiva (Swagger): `http://localhost:8000/docs`
 
 El motor de inferencia (`InferenceEngine`) y el clasificador TM (`TeachableMachineClassifier`) se crean **una sola vez** al iniciar la API y se reutilizan en cada petición. Esto es crítico para el rendimiento en Raspberry Pi: crearlos desde cero en cada llamada tarda ~4x más que reutilizarlos.
 
-El endpoint `/clasificar/imagen` usa el **mismo flujo híbrido TM+Gemini** que la cámara en tiempo real — no usa TM o Gemini por separado como antes.
+El endpoint `/clasificar/imagen` usa el **mismo flujo híbrido TM + Claude/Gemini** que la cámara en tiempo real — no usa TM o API por separado como antes.
 
 Las imágenes subidas en `images/api_uploads/` se limpian automáticamente: el sistema conserva solo los 50 archivos más recientes para evitar que el almacenamiento de la Raspberry Pi se llene.
 
@@ -757,7 +800,7 @@ Cada clasificación, error y evento de inicio queda registrado en `logs/reci.log
 2026-06-22 21:45:12 | INFO | API iniciada | modo=HIBRIDO_TM_GEMINI
 2026-06-22 21:45:38 | INFO | clasificar_imagen | PLASTICO 99.8% | vision=hibrido_tm_gemini | archivo=foto.jpg
 2026-06-22 21:45:41 | INFO | clasificar_atributos | VIDRIO 100.0% | objeto=botella_mocachino
-2026-06-22 21:46:02 | WARNING | Gemini falló (ReadTimeout) — fallback a TM
+2026-06-22 21:46:02 | WARNING | Claude falló (ReadTimeout) — fallback a TM+heurísticas
 ```
 
 Útil para diagnosticar errores en producción (Raspberry Pi) sin necesidad de conectar un monitor.
@@ -874,7 +917,7 @@ Latas de aluminio (Red Bull, Monster lata, Coca-Cola lata, atún), **Tetra Pak**
 python3 tests/test_cases.py
 ```
 
-**Resultado actual: 74/74 pruebas aprobadas (100%)**
+**Resultado actual: 110/110 pruebas aprobadas (100%)**
 
 | Categoría | Resultado | Objetos cubiertos |
 |---|---|---|
@@ -885,7 +928,7 @@ python3 tests/test_cases.py
 | CAMPUS_PLASTICO | 17/17 (100%) | Powerade, Dasani, Chocolatada, Colgate Plax, Speed Max, **Gatorade**, **Cola Gallito**, **Fioravanti** |
 | CAMPUS_VIDRIO | 7/7 (100%) | Mocachino campus, Pilsener campus, **Pony Malta** |
 | CAMPUS_ORGANICO | 2/2 (100%) | **Tetra Pak Del Valle**, Tetra Pak por atributos visuales |
-| LATA | 7/7 (100%) | Lata de aluminio (ML y por atributos), lata aplastada, lata ancha (atún), y bordes con VIDRIO/PLASTICO ante color/brillo metálico |
+| LATA | 11/11 (100%) | Lata de aluminio (ML y por atributos), lata aplastada, lata ancha (atún), y bordes con VIDRIO/PLASTICO ante color/brillo metálico |
 
 Para agregar nuevos casos de prueba: editar el archivo correspondiente en `tests/casos/` sin tocar `test_cases.py`.
 
@@ -893,6 +936,20 @@ Además, `tests/test_backward_chaining.py` valida directamente los goals de `Bac
 
 ```bash
 python3 tests/test_backward_chaining.py
+```
+
+Pruebas de imágenes reales con flujo completo (TM + API + SE + refinamiento):
+
+```bash
+python3 tests/test_imagenes_completo.py
+# Resultado esperado: 16/16 imágenes aprobadas (100%)
+```
+
+Pruebas unitarias del refinamiento OpenCV post-API:
+
+```bash
+python3 tests/test_refinar_api.py
+# Resultado esperado: 5/5 pruebas aprobadas (100%)
 ```
 
 ---
@@ -947,6 +1004,16 @@ for i in range(3):
 ```
 En la Raspberry Pi Camera Module usar `cv2.VideoCapture(0)` con el driver V4L2 activado.
 
+### Claude da error 404 / 429 / timeout
+
+| Error | Causa |
+|---|---|
+| `404 Not Found` | Modelo mal escrito en `.env` — verificar `CLAUDE_MODEL=claude-haiku-4-5` (sin `s` extra al final) |
+| `429 Too Many Requests` | Rate limit — el sistema reintenta con pausa automática |
+| `ReadTimeout` | La respuesta tardó más de 60 segundos |
+
+**El sistema maneja estos errores automáticamente** — cae al modo TM + heurísticas OpenCV sin interrumpir la clasificación.
+
 ### Gemini da error 503 / 429 / timeout
 
 | Error | Causa |
@@ -955,7 +1022,7 @@ En la Raspberry Pi Camera Module usar `cv2.VideoCapture(0)` con el driver V4L2 a
 | `503 Service Unavailable` | Servidor de Google temporalmente caído |
 | `ReadTimeout` | La respuesta tardó más de 60 segundos |
 
-**El sistema maneja todos estos errores automáticamente** — cae al modo TM-solo sin mostrar ningún error al usuario ni interrumpir la clasificación. La cámara y la API siguen funcionando con normalidad, con menor precisión en objetos ambiguos.
+**El sistema maneja todos estos errores automáticamente** — cae al modo TM + heurísticas OpenCV sin mostrar ningún error al usuario ni interrumpir la clasificación. La cámara y la API siguen funcionando con normalidad, con menor precisión en objetos ambiguos.
 
 La API gratuita de Gemini 2.5 Flash tiene ~250 requests/día. Si se hacen muchas pruebas seguidas (ej. 16 imágenes × varias sesiones), el cupo puede agotarse. Para uso intensivo, considerar una API key de pago (Gemini o Claude API).
 
@@ -982,8 +1049,8 @@ uvicorn api.app:app --reload --port 8000
 | Resultado de aprendizaje | Implementado en |
 |---|---|
 | Fundamentos de sistemas expertos | `knowledge_base.py` + `inference_engine.py` |
-| Relación SE con IA | Arquitectura híbrida MobileNetV2 + SE handcrafted + Gemini |
-| Encadenamiento hacia adelante | `InferenceEngine.ejecutar()` — loop sobre 113 reglas |
+| Relación SE con IA | Arquitectura híbrida MobileNetV2 + SE handcrafted + Claude/Gemini |
+| Encadenamiento hacia adelante | `InferenceEngine.ejecutar()` — loop sobre 174 reglas |
 | Encadenamiento hacia atrás | `BackwardChainingEngine` — verificación de hipótesis por goals ponderados |
 | Factor de Certeza MYCIN | `CertaintyFactor` — fórmula de combinación + bonus por especificidad |
 | Meta-conocimiento | `MetaRuleEngine` — 12 meta-reglas que controlan el razonamiento |
@@ -1014,10 +1081,10 @@ uvicorn api.app:app --reload --port 8000
 ### Completado ✅
 
 **Sistema experto:**
-- **113 reglas**, forward + backward chaining, CF MYCIN, **12 meta-reglas**
+- **174 reglas**, forward + backward chaining, CF MYCIN, **16 meta-reglas**
 - Productos ecuatorianos: Fioravanti, Cola Gallito, Gatorade, Pony Malta, Tetra Pak, Güitig vidrio, Zhumir, Pulp/Tampico, aceite de cocina, Colgate Plax/Listerine
 - Validador de atributos, estadísticas, reporte técnico JSON
-- **74/74 pruebas formales (100%)** — campus, ambiguos, extremos, LATA
+- **110/110 pruebas formales (100%)** — campus, ambiguos, extremos, LATA
 - Condiciones eliminatorias en backward chaining: VIDRIO requiere tapa metálica, LATA requiere brillo metálico — ambas con 6/6 pruebas dedicadas
 
 **Modelo ML:**
@@ -1025,29 +1092,31 @@ uvicorn api.app:app --reload --port 8000
 - Notebook mejorado: semillas reproducibles (`RANDOM_SEED=42`), `class_weight` automático, métricas por clase (precision/recall/F1), matriz de confusión, path de dataset corregido
 
 **Visión e IA:**
-- Flujo híbrido TM + Gemini: TM da contexto → Gemini analiza visualmente → SE decide
-- Gemini configurado con `responseMimeType: application/json` — respuesta JSON directa sin parseo manual
-- Fallback automático y silencioso a TM-solo cuando Gemini falla (429, 503, timeout)
+- Flujo híbrido TM + Claude Haiku (o Gemini): TM da contexto → API analiza visualmente → `refinar_atributos_api` → SE decide
+- Claude Haiku por defecto (~$0.001–0.002/foto); Gemini como alternativa
+- Fallback automático a TM + `refinar_atributos` + `refinar_atributos_api` cuando la API falla (404, 429, 503, timeout)
+- **16/16 imágenes reales** aprobadas en batch de prueba (con o sin API)
 
 **Cámara:**
 - Modo demo con 4 estados (PREVIEW → COUNTDOWN → ANALIZANDO → RESULTADO)
-- Análisis TM+Gemini corre en **hilo separado (threading)** — la barra de progreso animada es real, la interfaz nunca se congela
+- Análisis TM+API corre en **hilo separado (threading)** — la barra de progreso animada es real, la interfaz nunca se congela
 - Corrección manual con `P`/`V` disponible en cualquier momento
+- Rechazo con mensaje **"Material no permitido — depositar en tacho general"**
 
 **API REST:**
 - Motor de inferencia **y** clasificador TM cargados globalmente — **4x más rápido** en Raspberry Pi
-- `/clasificar/imagen` usa flujo híbrido TM+Gemini (igual que la cámara)
+- `/clasificar/imagen` usa flujo híbrido TM + Claude/Gemini (igual que la cámara)
 - Limpieza automática de `api_uploads/` — conserva solo los 50 más recientes
 - **Logging persistente en `logs/reci.log`** — registro de clasificaciones, errores y eventos de producción
 
 **Otros:**
-- Prompts de Gemini con guía explícita de objetos no permitidos (papel, lata, cartón)
+- Prompts de Claude/Gemini con guía explícita de objetos no permitidos (papel, lata, cartón)
 - Script de recolección de fotos con modo ráfaga automática
 - Pruebas de imágenes reales con reporte de tiempo por imagen y promedio de sesión
 
 ### En progreso 🔄
 
-- Pruebas de imágenes reales con flujo híbrido completo: 13/16 con Gemini disponible (2 fallos por TM sin clase de vidrio Gatorade, 1 fallo por ambigüedad visual papel/vaso) — mejorable reentrenando el modelo con más variedad de botellas de vidrio y vasos plásticos oscuros
+- Verificación en vivo con cámara usando Claude Haiku (confirmar que el modelo en `.env` responde sin 404)
 - Integración con hardware físico
 
 ### Pendiente ⏳
@@ -1064,7 +1133,7 @@ uvicorn api.app:app --reload --port 8000
 
 | Criterio | Umbral | Estado actual |
 |---|---|---|
-| Precisión clasificación vidrio/plástico | ≥ 85% | **98.2%** modelo · **81.2%** pruebas imagen (Gemini sin cupo) ✅ |
+| Precisión clasificación vidrio/plástico | ≥ 85% | **98.2%** modelo · **16/16** pruebas imagen ✅ |
 | Tiempo de respuesta flujo híbrido | ≤ 3 seg | ~2–2.5 seg ✅ |
 | Tiempo de respuesta app al punto más cercano | ≤ 3 seg | Pendiente |
 | Sistema de recompensas registra correctamente | — | Pendiente |
@@ -1078,6 +1147,43 @@ uvicorn api.app:app --reload --port 8000
 ---
 
 ## Changelog — historial de cambios
+
+### Junio 2026 — v2.7 (refinamiento fallback + mensaje hardware + reglas lata/vidrio)
+
+**`vision/visual_heuristics.py`**
+- `refinar_atributos_api()` también en fallback TM (no solo post-Claude/Gemini).
+- Balance lata/vidrio/PET: TM ≥92% plástico no flip a vidrio; ámbar fuerte → vidrio; detección lata mejorada.
+
+**`vision/tm_classifier.py`**
+- Integra ambos refinamientos (`refinar_atributos` + `refinar_atributos_api`) en fallback.
+- Pasa `prob_vidrio` del TM al refinamiento.
+
+**`expert_system/inference_engine.py`**
+- Mensaje hardware unificado: **"Material no permitido — depositar en tacho general"**.
+
+**`expert_system/knowledge_base.py`**
+- Reglas R165–R167 para lata/vidrio en bordes ambiguos.
+
+**`tests/test_refinar_api.py`** (nuevo) — 5/5 pruebas unitarias de refinamiento.
+
+**Resultado:** 16/16 imágenes · 110/110 SE · 5/5 refinamiento.
+
+---
+
+### Junio 2026 — v2.6 (integración Claude Vision)
+
+**`vision/attribute_extractor.py`**
+- Soporte `VISION_API=claude|gemini` con Claude Haiku por defecto.
+- Reintentos automáticos en 429; normalización de typo `claude-haiku-4-5s` → `claude-haiku-4-5`.
+- Fallback automático a Sonnet si el modelo Haiku no existe.
+
+**`.env.example`** / **`env.example`**
+- Plantillas con `VISION_API`, `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`.
+
+**`docs/FLUJO_RECONOCIMIENTO.md`**
+- Documentación actualizada: Claude Haiku, costos, checklist de demo.
+
+---
 
 ### Junio 2026 — v2.5 (fallback TM+heurísticas OpenCV + resiliencia Gemini)
 
@@ -1227,4 +1333,4 @@ tenía 2 clases (`plastico`/`vidrio`) y mapeaba todo a atributos genéricos inco
 
 ---
 
-*Última actualización: Junio 2026 — v2.5 · 174 reglas · 16 meta-reglas · Fallback TM+OpenCV · 108/108 + 16/16 tests*
+*Última actualización: Junio 2026 — v2.7 · 174 reglas · 16 meta-reglas · Claude Haiku + refinamiento OpenCV · 110/110 + 16/16 + 5/5 tests*
