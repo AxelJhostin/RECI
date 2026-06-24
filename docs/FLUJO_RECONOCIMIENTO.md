@@ -226,7 +226,16 @@ Configurar en `.env`:
 ```bash
 VISION_API=claude
 ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-6   # opcional; fallback: claude-haiku-4-5
+CLAUDE_MODEL=claude-haiku-4-5   # recomendado: barato y rápido
+# CLAUDE_MODEL=claude-sonnet-4-6  # más preciso, ~5-10× más caro
 ```
 
-Mismo contrato de **9 atributos JSON** → el sistema experto no cambia. Si Claude falla (429, red), el fallback automático es **TM + heurísticas OpenCV**.
+**Costo estimado con Haiku:** ~$0.001–0.002/foto (~$0.02–0.04 por test de 16 imágenes).
+
+**Test batch sin rate limit:**
+```bash
+python3 tests/test_imagenes_completo.py          # pausa 2s entre fotos (default)
+python3 tests/test_imagenes_completo.py --sin-pausa  # más rápido, puede activar fallback
+```
+
+Mismo contrato de **9 atributos JSON** → el sistema experto no cambia. Si Claude falla (429, red), el fallback automático es **TM + heurísticas OpenCV**. El rate limit (429) ya no desactiva Claude para el resto del batch.

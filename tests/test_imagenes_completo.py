@@ -1,12 +1,13 @@
 # tests/test_imagenes_completo.py
-# Prueba todas las imágenes con el flujo completo TM + Gemini
-# Uso: python3 tests/test_imagenes_completo.py
+# Prueba todas las imágenes con el flujo completo TM + API visión + SE
+# Uso: python3 tests/test_imagenes_completo.py [--pausa 2] [--sin-pausa]
 
 import sys
 import os
 import cv2
 import io
 import time
+import argparse
 import contextlib
 import warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # suprimir logs de TensorFlow
@@ -45,24 +46,21 @@ IMAGENES = [
 
 def clasificar_imagen(ruta, clf, extractor):
     """
-    Flujo híbrido: TM da contexto → Gemini analiza siempre → SE decide.
+    Flujo híbrido: TM da contexto → API analiza → SE decide.
     Retorna info detallada para debug.
     """
     img = cv2.imread(ruta)
     if img is None:
         return "ERROR", 0.0, "error", 0.0, "—", {}
 
-    # TM silencioso — solo para obtener el contexto
     with contextlib.redirect_stdout(io.StringIO()):
         _, clase_tm, prob_tm = clf.analizar_frame(img)
 
-    # Gemini SIEMPRE analiza con el contexto del TM
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             atributos = extractor.analizar_imagen_hibrido(ruta, clase_tm, prob_tm)
         metodo = "Hibrido"
-    except Exception as e:
-        # Fallback: TM + heurísticas visuales si Gemini falla
+    except Exception:
         with contextlib.redirect_stdout(io.StringIO()):
             atributos = clf.analizar_imagen(ruta)
         metodo = "TM+heurísticas"
@@ -71,39 +69,46 @@ def clasificar_imagen(ruta, clf, extractor):
     engine.cargar_hechos(atributos)
     conclusion, confianza, _ = engine.ejecutar()
 
-    gemini_objeto = atributos.get("objeto_reconocido", "—")
-    return conclusion, confianza, metodo, prob_tm, gemini_objeto, atributos
+    api_objeto = atributos.get("objeto_reconocido", "—")
+    return conclusion, confianza, metodo, prob_tm, api_objeto, atributos
 
 
-def ejecutar_pruebas():
-    # Cargar modelos suprimiendo warnings
+def ejecutar_pruebas(pausa_seg: float = 2.0):
     with contextlib.redirect_stderr(io.StringIO()):
         with contextlib.redirect_stdout(io.StringIO()):
             clf = TeachableMachineClassifier()
 
     try:
         extractor = AttributeExtractor()
-        gemini_ok = True
+        api_ok = True
     except Exception:
         extractor = None
-        gemini_ok = False
+        api_ok = False
 
     print("\n" + "█" * 72)
     print("  RECI — PRUEBA COMPLETA  FLUJO HÍBRIDO TM + API VISIÓN + SE")
-    provider = extractor.vision_api.upper() if extractor else "—"
-    print(f"  Imágenes: {len(IMAGENES)}  |  "
-          f"API visión: {'✅ ' + provider if gemini_ok else '❌ no disponible'}")
+    if api_ok:
+        modelo = extractor.modelos[0]
+        print(f"  Imágenes: {len(IMAGENES)}  |  "
+              f"API: ✅ {extractor.vision_api.upper()} ({modelo})")
+        if pausa_seg > 0:
+            print(f"  Pausa entre fotos: {pausa_seg:.1f}s (evita rate limit)")
+    else:
+        print(f"  Imágenes: {len(IMAGENES)}  |  API visión: ❌ no disponible")
     print(f"  Flujo: TM (contexto) → API (análisis) → Sistema Experto (decisión)")
     print("█" * 72)
 
     aprobados      = 0
     fallidos       = 0
-    con_gemini     = 0
+    con_api        = 0
     fallidos_lista = []
     tiempos        = []
 
-    for ruta, descripcion, esperado in IMAGENES:
+    for idx, (ruta, descripcion, esperado) in enumerate(IMAGENES):
         nombre = os.path.basename(ruta)
+
+        if idx > 0 and api_ok and pausa_seg > 0:
+            time.sleep(pausa_seg)
 
         print(f"\n  {'─'*68}")
         print(f"  🖼  {nombre}  —  {descripcion}")
@@ -113,7 +118,7 @@ def ejecutar_pruebas():
             continue
 
         t_inicio = time.time()
-        conclusion, confianza, metodo, prob_tm, gemini_obj, atributos = \
+        conclusion, confianza, metodo, prob_tm, api_obj, atributos = \
             clasificar_imagen(ruta, clf, extractor)
         t_total = time.time() - t_inicio
         tiempos.append(t_total)
@@ -128,16 +133,15 @@ def ejecutar_pruebas():
             fallidos_lista.append((nombre, descripcion, esperado, conclusion,
                                    metodo, prob_tm, atributos, t_total))
         if metodo == "Hibrido":
-            con_gemini += 1
+            con_api += 1
 
-        # Detalle del análisis
         print(f"  TM contexto    : {atributos.get('objeto_reconocido','?')} "
               f"(TM prob: {prob_tm:.1%})")
 
         if metodo == "Hibrido":
-            print(f"  API detectó  : {gemini_obj}")
+            print(f"  API detectó    : {api_obj}")
         elif metodo == "TM+heurísticas":
-            print(f"  API visión   : ❌ falló — se usó TM + heurísticas visuales (OpenCV)")
+            print(f"  API visión     : ❌ falló — TM + heurísticas visuales (OpenCV)")
 
         print(f"  Objeto → {atributos.get('objeto_reconocido','?')} | "
               f"Confianza ML → {atributos.get('confianza_ml','?')}")
@@ -146,7 +150,6 @@ def ejecutar_pruebas():
         print(f"  ⏱  Tiempo      : {t_total:.2f}s")
         print(f"  {estado}  {'✓ Correcto' if aprobado else '✗ Error — revisar'}")
 
-    # ── Resumen final ─────────────────────────────────────────
     total = aprobados + fallidos
     pct   = aprobados / total * 100 if total > 0 else 0
 
@@ -159,8 +162,8 @@ def ejecutar_pruebas():
     print(f"  RESULTADOS FINALES")
     print(f"{'─'*72}")
     print(f"  Precisión     : {aprobados}/{total} ({pct:.1f}%)")
-    print(f"  Híbrido TM+API    : {con_gemini} imágenes")
-    print(f"  Solo TM+heurísticas (fallback): {total - con_gemini} imágenes")
+    print(f"  Híbrido TM+API    : {con_api} imágenes")
+    print(f"  Solo TM+heurísticas (fallback): {total - con_api} imágenes")
     print(f"{'─'*72}")
     print(f"  ⏱  TIEMPOS")
     print(f"  Promedio  : {t_promedio:.2f}s por imagen")
@@ -186,4 +189,15 @@ def ejecutar_pruebas():
 
 
 if __name__ == "__main__":
-    ejecutar_pruebas()
+    parser = argparse.ArgumentParser(description="Prueba batch RECI (16 imágenes)")
+    parser.add_argument(
+        "--pausa", type=float, default=2.0,
+        help="Segundos entre imágenes para evitar rate limit (default: 2)",
+    )
+    parser.add_argument(
+        "--sin-pausa", action="store_true",
+        help="Sin pausa entre imágenes (más rápido, puede activar fallback)",
+    )
+    args = parser.parse_args()
+    pausa = 0.0 if args.sin_pausa else args.pausa
+    ejecutar_pruebas(pausa_seg=pausa)

@@ -43,8 +43,8 @@ class AttributeExtractor:
         "gemini-2.0-flash",
     ]
     CLAUDE_MODELS = [
-        "claude-sonnet-4-6",
         "claude-haiku-4-5",
+        "claude-sonnet-4-6",
     ]
 
     # Le indica a Gemini que devuelva JSON puro, sin markdown ni explicaciones.
@@ -165,7 +165,12 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 f"VISION_API inválido: '{self.vision_api}'. Usa 'claude' o 'gemini'."
             )
 
-        # Si la API falla en la primera imagen, no reintentar en las siguientes
+        # Si la API falla por auth, no reintentar en las siguientes
+        self._vision_activo = True
+        self._vision_error  = None
+
+    def reiniciar_sesion(self) -> None:
+        """Reactiva la API tras un fallo de auth (401/403). Rate limits no la desactivan."""
         self._vision_activo = True
         self._vision_error  = None
 
@@ -243,12 +248,17 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     break
 
         if ultimo_error:
-            self._vision_activo = False
-            self._vision_error  = self._mensaje_error_api(ultimo_error, "gemini")
+            status = (
+                ultimo_error.response.status_code
+                if isinstance(ultimo_error, httpx.HTTPStatusError) else None
+            )
+            if status in (401, 403):
+                self._vision_activo = False
+                self._vision_error  = self._mensaje_error_api(ultimo_error, "gemini")
             raise ultimo_error
         raise RuntimeError("Gemini: sin respuesta de ningún modelo")
 
-    def _llamar_claude(self, payload: dict, max_reintentos: int = 1) -> dict:
+    def _llamar_claude(self, payload: dict, max_reintentos: int = 3) -> dict:
         """
         Llama a la API de Claude con reintentos y fallback entre modelos.
         """
@@ -262,12 +272,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         }
 
         ultimo_error = None
-        cuota_agotada = False
 
         for modelo in self.modelos:
-            if cuota_agotada:
-                break
-
             body = {**payload, "model": modelo}
 
             for intento in range(max_reintentos + 1):
@@ -280,12 +286,16 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 except httpx.HTTPStatusError as e:
                     ultimo_error = e
                     status = e.response.status_code
-                    if status == 429:
-                        cuota_agotada = True
-                        logger.warning("Claude %s HTTP 429 — cuota agotada", modelo)
-                        break
+                    if status == 429 and intento < max_reintentos:
+                        espera = 5.0 * (intento + 1)
+                        logger.warning(
+                            "Claude %s HTTP 429 — rate limit, reintento %d en %.0fs",
+                            modelo, intento + 1, espera,
+                        )
+                        time.sleep(espera)
+                        continue
                     if status in (529, 503) and intento < max_reintentos:
-                        espera = 1.0 * (intento + 1)
+                        espera = 2.0 * (intento + 1)
                         logger.warning("Claude %s HTTP %s — reintento %d en %.1fs",
                                        modelo, status, intento + 1, espera)
                         time.sleep(espera)
@@ -294,6 +304,10 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                         logger.warning("Claude %s HTTP %s — probando siguiente modelo",
                                        modelo, status)
                         break
+                    if status in (401, 403):
+                        self._vision_activo = False
+                        self._vision_error  = self._mensaje_error_api(e, "claude")
+                        raise
                     raise
                 except httpx.RequestError as e:
                     ultimo_error = e
@@ -303,8 +317,6 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     break
 
         if ultimo_error:
-            self._vision_activo = False
-            self._vision_error  = self._mensaje_error_api(ultimo_error, "claude")
             raise ultimo_error
         raise RuntimeError("Claude: sin respuesta de ningún modelo")
 
@@ -315,7 +327,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         if isinstance(error, httpx.HTTPStatusError):
             status = error.response.status_code
             if status == 429:
-                return f"{nombre}: cuota agotada (429)"
+                return f"{nombre}: rate limit (429) — espera unos segundos"
             if status in (503, 529):
                 return f"{nombre}: servidor saturado ({status})"
             if status == 403:
