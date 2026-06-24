@@ -89,10 +89,11 @@ def ejecutar_pruebas():
         gemini_ok = False
 
     print("\n" + "█" * 72)
-    print("  RECI — PRUEBA COMPLETA  FLUJO HÍBRIDO TM + GEMINI + SE")
+    print("  RECI — PRUEBA COMPLETA  FLUJO HÍBRIDO TM + API VISIÓN + SE")
+    provider = extractor.vision_api.upper() if extractor else "—"
     print(f"  Imágenes: {len(IMAGENES)}  |  "
-          f"Gemini: {'✅ disponible' if gemini_ok else '❌ no disponible'}")
-    print(f"  Flujo: TM (contexto) → Gemini (análisis) → Sistema Experto (decisión)")
+          f"API visión: {'✅ ' + provider if gemini_ok else '❌ no disponible'}")
+    print(f"  Flujo: TM (contexto) → API (análisis) → Sistema Experto (decisión)")
     print("█" * 72)
 
     aprobados      = 0
@@ -134,9 +135,9 @@ def ejecutar_pruebas():
               f"(TM prob: {prob_tm:.1%})")
 
         if metodo == "Hibrido":
-            print(f"  Gemini detectó : {gemini_obj}")
+            print(f"  API detectó  : {gemini_obj}")
         elif metodo == "TM+heurísticas":
-            print(f"  Gemini         : ❌ falló — se usó TM + heurísticas visuales (OpenCV)")
+            print(f"  API visión   : ❌ falló — se usó TM + heurísticas visuales (OpenCV)")
 
         print(f"  Objeto → {atributos.get('objeto_reconocido','?')} | "
               f"Confianza ML → {atributos.get('confianza_ml','?')}")
@@ -158,7 +159,7 @@ def ejecutar_pruebas():
     print(f"  RESULTADOS FINALES")
     print(f"{'─'*72}")
     print(f"  Precisión     : {aprobados}/{total} ({pct:.1f}%)")
-    print(f"  Híbrido TM+Gemini : {con_gemini} imágenes")
+    print(f"  Híbrido TM+API    : {con_gemini} imágenes")
     print(f"  Solo TM+heurísticas (fallback): {total - con_gemini} imágenes")
     print(f"{'─'*72}")
     print(f"  ⏱  TIEMPOS")

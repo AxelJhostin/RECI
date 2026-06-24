@@ -1,7 +1,7 @@
 # vision/camera.py
 # Módulo de captura de imagen en tiempo real
 # Modo demo: ESPACIO activa cuenta regresiva → captura → clasifica
-# Flujo: TM primero → si confianza < 95% → Gemini confirma
+# Flujo: TM (contexto) → Gemini (análisis) → SE (decisión) · fallback TM+OpenCV
 # En producción: sensor ultrasónico reemplaza el ESPACIO
 
 import cv2
@@ -447,7 +447,7 @@ if __name__ == "__main__":
     tm_classifier = None
     try:
         tm_classifier = TeachableMachineClassifier()
-        print("  🤖 Modo: TM + Gemini (TM >= 95% directo)")
+        print("  🤖 Modo: TM (contexto) → Gemini (análisis) → SE (decisión)")
     except FileNotFoundError:
         print("  🔮 Modo: Solo Gemini")
 

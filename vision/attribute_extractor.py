@@ -1,14 +1,13 @@
 # vision/attribute_extractor.py
-# Extractor de atributos visuales — flujo híbrido TM + Gemini
+# Extractor de atributos visuales — flujo híbrido TM + API de visión
 # Módulo de visión del sistema experto RECI
 #
 # FLUJO PRINCIPAL (analizar_y_clasificar_hibrido):
 #   1. TM corre primero (~0.1s) → da su voto como contexto
-#   2. Gemini SIEMPRE analiza la imagen (~2s) con ese contexto
+#   2. Claude o Gemini analiza la imagen (~2s) con ese contexto
 #   3. Sistema experto toma la decisión final
 #
-# Esto permite que Gemini corrija errores del TM (papel → PLASTICO, etc.)
-# sin perder la velocidad del TM como guía inicial.
+# Proveedor configurable con VISION_API=claude|gemini en .env
 
 import os
 import json
@@ -26,21 +25,26 @@ class AttributeExtractor:
     Extrae atributos visuales de una imagen.
 
     Flujo recomendado: analizar_y_clasificar_hibrido(ruta, clf=tm_classifier)
-    - TM actúa como contexto inicial para Gemini
-    - Gemini siempre hace el análisis visual definitivo
-    - El sistema experto decide con los 9 atributos de Gemini
+    - TM actúa como contexto inicial para la API de visión
+    - Claude o Gemini hace el análisis visual definitivo
+    - El sistema experto decide con los 9 atributos extraídos
     """
 
     GEMINI_URL = (
         "https://generativelanguage.googleapis.com/v1beta/models"
         "/{model}:generateContent"
     )
+    CLAUDE_URL = "https://api.anthropic.com/v1/messages"
+    CLAUDE_VERSION = "2023-06-01"
 
-    # Modelos en orden de preferencia; se prueba el siguiente si hay 429/503
     GEMINI_MODELS = [
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
         "gemini-2.0-flash",
+    ]
+    CLAUDE_MODELS = [
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
     ]
 
     # Le indica a Gemini que devuelva JSON puro, sin markdown ni explicaciones.
@@ -128,15 +132,46 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
     def __init__(self):
         from dotenv import load_dotenv
         load_dotenv()
-        self.api_key = os.environ.get("GEMINI_API_KEY", "")
-        if not self.api_key:
+
+        self.vision_api = os.environ.get("VISION_API", "").lower().strip()
+        if not self.vision_api:
+            if os.environ.get("ANTHROPIC_API_KEY"):
+                self.vision_api = "claude"
+            elif os.environ.get("GEMINI_API_KEY"):
+                self.vision_api = "gemini"
+            else:
+                raise ValueError(
+                    "Configura ANTHROPIC_API_KEY o GEMINI_API_KEY en .env "
+                    "(opcional: VISION_API=claude|gemini)"
+                )
+
+        if self.vision_api == "claude":
+            self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if not self.api_key:
+                raise ValueError(
+                    "VISION_API=claude pero ANTHROPIC_API_KEY no está en .env"
+                )
+            modelo = os.environ.get("CLAUDE_MODEL", "").strip()
+            self.modelos = [modelo] if modelo else list(self.CLAUDE_MODELS)
+        elif self.vision_api == "gemini":
+            self.api_key = os.environ.get("GEMINI_API_KEY", "")
+            if not self.api_key:
+                raise ValueError(
+                    "VISION_API=gemini pero GEMINI_API_KEY no está en .env"
+                )
+            self.modelos = list(self.GEMINI_MODELS)
+        else:
             raise ValueError(
-                "GEMINI_API_KEY no configurada. "
-                "Agrega GEMINI_API_KEY=tu_key en el archivo .env"
+                f"VISION_API inválido: '{self.vision_api}'. Usa 'claude' o 'gemini'."
             )
-        # Si Gemini falla en la primera imagen, no reintentar en las siguientes
-        self._gemini_activo = True
-        self._gemini_error   = None
+
+        # Si la API falla en la primera imagen, no reintentar en las siguientes
+        self._vision_activo = True
+        self._vision_error  = None
+
+    @property
+    def _provider_label(self) -> str:
+        return "Claude" if self.vision_api == "claude" else "Gemini"
 
     @staticmethod
     def _parsear_json(texto: str) -> dict:
@@ -165,13 +200,13 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         Llama a la API de Gemini con reintentos y fallback entre modelos.
         Lanza la última excepción si todos los intentos fallan.
         """
-        if not self._gemini_activo:
-            raise RuntimeError(self._gemini_error or "Gemini no disponible en esta sesión")
+        if not self._vision_activo:
+            raise RuntimeError(self._vision_error or "API de visión no disponible en esta sesión")
 
         ultimo_error = None
         cuota_agotada = False
 
-        for modelo in self.GEMINI_MODELS:
+        for modelo in self.modelos:
             if cuota_agotada:
                 break
 
@@ -208,28 +243,167 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     break
 
         if ultimo_error:
-            self._gemini_activo = False
-            self._gemini_error  = self._mensaje_error_gemini(ultimo_error)
+            self._vision_activo = False
+            self._vision_error  = self._mensaje_error_api(ultimo_error, "gemini")
             raise ultimo_error
         raise RuntimeError("Gemini: sin respuesta de ningún modelo")
 
+    def _llamar_claude(self, payload: dict, max_reintentos: int = 1) -> dict:
+        """
+        Llama a la API de Claude con reintentos y fallback entre modelos.
+        """
+        if not self._vision_activo:
+            raise RuntimeError(self._vision_error or "API de visión no disponible en esta sesión")
+
+        headers = {
+            "x-api-key":         self.api_key,
+            "anthropic-version": self.CLAUDE_VERSION,
+            "content-type":      "application/json",
+        }
+
+        ultimo_error = None
+        cuota_agotada = False
+
+        for modelo in self.modelos:
+            if cuota_agotada:
+                break
+
+            body = {**payload, "model": modelo}
+
+            for intento in range(max_reintentos + 1):
+                try:
+                    response = httpx.post(
+                        self.CLAUDE_URL, headers=headers, json=body, timeout=30.0
+                    )
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError as e:
+                    ultimo_error = e
+                    status = e.response.status_code
+                    if status == 429:
+                        cuota_agotada = True
+                        logger.warning("Claude %s HTTP 429 — cuota agotada", modelo)
+                        break
+                    if status in (529, 503) and intento < max_reintentos:
+                        espera = 1.0 * (intento + 1)
+                        logger.warning("Claude %s HTTP %s — reintento %d en %.1fs",
+                                       modelo, status, intento + 1, espera)
+                        time.sleep(espera)
+                        continue
+                    if status in (404, 529):
+                        logger.warning("Claude %s HTTP %s — probando siguiente modelo",
+                                       modelo, status)
+                        break
+                    raise
+                except httpx.RequestError as e:
+                    ultimo_error = e
+                    if intento < max_reintentos:
+                        time.sleep(0.5)
+                        continue
+                    break
+
+        if ultimo_error:
+            self._vision_activo = False
+            self._vision_error  = self._mensaje_error_api(ultimo_error, "claude")
+            raise ultimo_error
+        raise RuntimeError("Claude: sin respuesta de ningún modelo")
+
     @staticmethod
-    def _mensaje_error_gemini(error: Exception) -> str:
-        """Genera mensaje legible según el tipo de error de Gemini."""
+    def _mensaje_error_api(error: Exception, provider: str) -> str:
+        """Genera mensaje legible según el tipo de error de la API."""
+        nombre = "Claude" if provider == "claude" else "Gemini"
         if isinstance(error, httpx.HTTPStatusError):
             status = error.response.status_code
             if status == 429:
-                return "cuota agotada (429) — revisa billing en Google AI Studio"
-            if status == 503:
-                return "servidor saturado (503) — intenta en unos minutos"
+                return f"{nombre}: cuota agotada (429)"
+            if status in (503, 529):
+                return f"{nombre}: servidor saturado ({status})"
             if status == 403:
-                return "API key inválida (403)"
-            return f"HTTP {status}"
-        return error.__class__.__name__
+                return f"{nombre}: API key inválida (403)"
+            if status == 401:
+                return f"{nombre}: API key inválida (401)"
+            return f"{nombre}: HTTP {status}"
+        return f"{nombre}: {error.__class__.__name__}"
 
     @staticmethod
-    def _extraer_texto_respuesta(data: dict) -> str:
+    def _mensaje_error_gemini(error: Exception) -> str:
+        """Alias de compatibilidad."""
+        return AttributeExtractor._mensaje_error_api(error, "gemini")
+
+    @staticmethod
+    def _extraer_texto_gemini(data: dict) -> str:
         return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    @staticmethod
+    def _extraer_texto_claude(data: dict) -> str:
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                return block["text"].strip()
+        raise ValueError("Claude: respuesta sin bloque de texto")
+
+    def _extraer_texto_respuesta(self, data: dict) -> str:
+        if self.vision_api == "claude":
+            return self._extraer_texto_claude(data)
+        return self._extraer_texto_gemini(data)
+
+    def _construir_prompt(self, clase_tm: str = None, prob_tm: float = None) -> str:
+        if clase_tm and prob_tm is not None:
+            contexto_tm = (
+                f"\nCONTEXTO DEL CLASIFICADOR RÁPIDO (MobileNetV2):\n"
+                f"El modelo detectó '{clase_tm}' con {prob_tm:.0%} de confianza.\n"
+                f"Úsalo como referencia inicial, pero confía en tu análisis visual "
+                f"si ves algo diferente — especialmente en material, brillo de tapa y textura.\n"
+            )
+            return self.PROMPT_BASE.replace(
+                "REGLAS DE ANÁLISIS:",
+                contexto_tm + "\nREGLAS DE ANÁLISIS:"
+            )
+        return self.PROMPT_BASE
+
+    def _payload_gemini(self, prompt: str, imagen_b64: str, mime_type: str) -> dict:
+        return {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data":      imagen_b64
+                        }
+                    }
+                ]
+            }],
+            "generationConfig": self._GENERATION_CONFIG,
+        }
+
+    def _payload_claude(self, prompt: str, imagen_b64: str, mime_type: str) -> dict:
+        return {
+            "max_tokens": 512,
+            "temperature": 0.1,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type":       "base64",
+                            "media_type": mime_type,
+                            "data":       imagen_b64,
+                        }
+                    },
+                    {"type": "text", "text": prompt},
+                ]
+            }],
+        }
+
+    def _llamar_vision(self, prompt: str, imagen_b64: str, mime_type: str) -> dict:
+        if self.vision_api == "claude":
+            return self._llamar_claude(
+                self._payload_claude(prompt, imagen_b64, mime_type)
+            )
+        return self._llamar_gemini(
+            self._payload_gemini(prompt, imagen_b64, mime_type)
+        )
 
     def _imagen_a_base64(self, ruta_imagen: str) -> tuple:
         """Convierte imagen a base64 y detecta el tipo MIME."""
@@ -249,34 +423,18 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
 
     def analizar_imagen(self, ruta_imagen: str) -> dict:
         """
-        Analiza una imagen con Gemini y retorna los 9 atributos.
-        Versión actual (prototipo) — funciona sin modelo entrenado.
+        Analiza una imagen con Claude o Gemini y retorna los 9 atributos.
         """
-        print(f"  🔍 Analizando imagen con Gemini: {ruta_imagen}")
+        print(f"  🔍 Analizando imagen con {self._provider_label}: {ruta_imagen}")
 
         imagen_b64, mime_type = self._imagen_a_base64(ruta_imagen)
-
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": self.PROMPT},
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data":      imagen_b64
-                        }
-                    }
-                ]
-            }],
-            "generationConfig": self._GENERATION_CONFIG,
-        }
-
-        data  = self._llamar_gemini(payload)
+        data  = self._llamar_vision(self.PROMPT, imagen_b64, mime_type)
         texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
-        logger.info("analizar_imagen OK | objeto=%s confianza=%s",
-                    atributos.get("objeto_reconocido"), atributos.get("confianza_ml"))
+        logger.info("analizar_imagen OK | provider=%s objeto=%s confianza=%s",
+                    self.vision_api, atributos.get("objeto_reconocido"),
+                    atributos.get("confianza_ml"))
         print(f"  ✅ Atributos extraídos: {atributos}")
         return atributos
 
@@ -304,56 +462,23 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                                 clase_tm: str = None,
                                 prob_tm: float = None) -> dict:
         """
-        Flujo híbrido: Gemini SIEMPRE analiza la imagen.
+        Flujo híbrido: Claude o Gemini SIEMPRE analiza la imagen.
         Si se pasa el resultado del TM, lo incluye como contexto en el prompt.
-
-        clase_tm : etiqueta que devolvió TM  (ej: "plastico", "vidrio")
-        prob_tm  : probabilidad de TM        (ej: 0.994)
-
-        TM actúa solo como referencia — Gemini hace el análisis visual final.
-        Si Gemini ve algo diferente a lo que TM dijo, prevalece Gemini.
         """
-        print(f"  🔍 Gemini analizando (flujo híbrido): {ruta_imagen}")
+        provider = self._provider_label
+        print(f"  🔍 {provider} analizando (flujo híbrido): {ruta_imagen}")
 
         imagen_b64, mime_type = self._imagen_a_base64(ruta_imagen)
+        prompt = self._construir_prompt(clase_tm, prob_tm)
 
-        # Insertar contexto del TM en el prompt si está disponible
-        if clase_tm and prob_tm is not None:
-            contexto_tm = (
-                f"\nCONTEXTO DEL CLASIFICADOR RÁPIDO (MobileNetV2):\n"
-                f"El modelo detectó '{clase_tm}' con {prob_tm:.0%} de confianza.\n"
-                f"Úsalo como referencia inicial, pero confía en tu análisis visual "
-                f"si ves algo diferente — especialmente en material, brillo de tapa y textura.\n"
-            )
-            prompt = self.PROMPT_BASE.replace(
-                "REGLAS DE ANÁLISIS:",
-                contexto_tm + "\nREGLAS DE ANÁLISIS:"
-            )
-        else:
-            prompt = self.PROMPT_BASE
-
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data":      imagen_b64
-                        }
-                    }
-                ]
-            }],
-            "generationConfig": self._GENERATION_CONFIG,
-        }
-
-        data  = self._llamar_gemini(payload)
+        data  = self._llamar_vision(prompt, imagen_b64, mime_type)
         texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
-        logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → gemini=%s",
-                    clase_tm, (prob_tm or 0) * 100, atributos.get("objeto_reconocido"))
-        print(f"  ✅ Gemini → {atributos.get('objeto_reconocido')} "
+        logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → %s=%s",
+                    clase_tm, (prob_tm or 0) * 100, self.vision_api,
+                    atributos.get("objeto_reconocido"))
+        print(f"  ✅ {provider} → {atributos.get('objeto_reconocido')} "
               f"(confianza: {atributos.get('confianza_ml')})")
         return atributos
 
@@ -362,13 +487,9 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         FLUJO PRINCIPAL DE RECI.
 
         Pasos:
-        1. TM corre (~0.1s) si clf está disponible → da contexto a Gemini
-        2. Gemini analiza siempre (~2s) → extrae los 9 atributos visuales
+        1. TM corre (~0.1s) si clf está disponible → da contexto a la API de visión
+        2. Claude o Gemini analiza (~2s) → extrae los 9 atributos visuales
         3. Sistema experto decide con esos atributos
-
-        Ventaja: Gemini puede corregir errores del TM
-        (papel clasificado como plástico, Gatorade vidrio, etc.)
-        y también detectar objetos que no son ni plástico ni vidrio.
 
         clf: instancia de TeachableMachineClassifier ya cargada (opcional)
         """
@@ -389,23 +510,23 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 img = cv2.imread(ruta_imagen)
                 if img is not None:
                     _, clase_tm, prob_tm = clf.analizar_frame(img)
-                    print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%}) — pasa a Gemini como contexto")
+                    print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%}) — pasa a {self._provider_label} como contexto")
             except Exception as e:
-                print(f"  ⚠ TM falló ({e}), Gemini continúa sin contexto")
+                print(f"  ⚠ TM falló ({e}), {self._provider_label} continúa sin contexto")
 
-        # ── Paso 2: Gemini analiza siempre (fallback a TM si falla) ─────
+        # ── Paso 2: API de visión (fallback a TM si falla) ───────────────
         try:
             atributos = self.analizar_imagen_hibrido(ruta_imagen, clase_tm, prob_tm)
         except Exception as e:
-            motivo = self._mensaje_error_gemini(e)
-            print(f"  ⚠ Gemini no disponible ({motivo}) — usando TM + heurísticas visuales")
+            motivo = self._mensaje_error_api(e, self.vision_api)
+            print(f"  ⚠ {self._provider_label} no disponible ({motivo}) — usando TM + heurísticas visuales")
             if clf is None:
                 try:
                     from vision.tm_classifier import TeachableMachineClassifier
                     clf = TeachableMachineClassifier()
                 except Exception as e2:
                     raise RuntimeError(
-                        "Gemini falló y TM no está disponible — sin clasificación posible"
+                        f"{self._provider_label} falló y TM no está disponible — sin clasificación posible"
                     ) from e
             atributos = clf.analizar_imagen(ruta_imagen)
 
@@ -508,7 +629,10 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         }
 
     def __repr__(self):
-        return f"AttributeExtractor(Gemini API, key={'configurada' if self.api_key else 'NO configurada'})"
+        return (
+            f"AttributeExtractor({self._provider_label} API, "
+            f"key={'configurada' if self.api_key else 'NO configurada'})"
+        )
 
 
 if __name__ == "__main__":

@@ -580,22 +580,33 @@ python3 tests/test_cases.py
 
 ## Flujo de visión híbrido
 
+> **Documento completo:** [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md) — diagrama, payload exacto a Gemini, costos y checklist de demo.
+
 ```
 Cámara captura imagen (1280×720 px)
         ↓
 MobileNetV2 (.tflite) — ~0.1 seg         ← siempre corre primero
 Clasifica entre plastico/vidrio
-Su resultado se pasa como CONTEXTO a Gemini
+Solo pasa a Gemini: clase + % (NO los 9 atributos del MAPA)
         ↓
-Gemini 2.5 Flash API — ~2 seg             ← siempre se ejecuta
-Analiza la imagen visualmente con el contexto del TM
-Puede confirmar o corregir lo que dijo TM
-Identifica el objeto real: botella PET, frasco de vidrio,
-papel, lata, cartón, etc. — no solo las 2 clases del TM
-Extrae los 9 atributos visuales
+Gemini 2.5 Flash API — ~2 seg             ← siempre se ejecuta si hay API key
+Imagen JPG completa (base64) + prompt + contexto TM
+Devuelve JSON con 9 atributos visuales
+        ↓ (si Gemini falla 429/503)
+TM + heurísticas OpenCV — ~0.1 seg        ← fallback automático (16/16 imágenes OK)
         ↓
-9 atributos → Sistema Experto → Decisión final
+9 atributos → Sistema Experto (174 reglas) → Decisión final → Hardware
 ```
+
+### Costo Gemini (estimado)
+
+| Por foto | 100 fotos | 500 fotos | 2000 fotos |
+|----------|-----------|-----------|------------|
+| ~$0.0009 (~0.09¢) | ~$0.09 | ~$0.46 | ~$1.85 |
+
+Recalcular con tus imágenes: `python3 scripts/estimar_costo_gemini.py`
+
+Configuración demo: copiar `env.example` → `.env` y pegar `GEMINI_API_KEY`. Vincular billing en [AI Studio](https://aistudio.google.com/) con tope de **$5**.
 
 **¿Por qué Gemini siempre actúa y no solo como fallback?**
 
@@ -603,17 +614,19 @@ El modelo TFLite solo conoce 2 clases: `plastico` y `vidrio`. Siempre elige una 
 
 Esto permite que el sistema experto produzca `DESCONOCIDO` (tacho general) para objetos que no son plástico ni vidrio, cumpliendo el alcance del proyecto.
 
-**¿Cómo le habla el TM a Gemini?**
+**¿Qué envía exactamente el TM a Gemini?**
 
-TM corre en ~0.1 seg y pasa su voto dentro del prompt de Gemini como contexto, así:
+Solo **2 líneas de texto** insertadas en el prompt (no la imagen procesada ni el MAPA_CLASES):
 
-```
-CONTEXTO DEL CLASIFICADOR RÁPIDO (MobileNetV2):
-El modelo detectó 'plastico' con 99% de confianza.
-Úsalo como referencia inicial, pero confía en tu análisis visual si ves algo diferente.
-```
+| Enviado | Ejemplo |
+|---------|---------|
+| `clase_tm` | `"plastico"` o `"vidrio"` |
+| `prob_tm` | `99%` |
+| Imagen JPG | archivo completo en base64 |
 
-Gemini puede confirmar o ignorar ese voto si ve algo distinto — lo que importa es su análisis visual.
+**No se envía:** `objeto_reconocido`, color, tapa, brillo ni ningún atributo del MAPA_CLASES del TM.
+
+Detalle completo y diagrama Mermaid: [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md).
 
 **Respuesta JSON estructurada:**
 
@@ -621,14 +634,14 @@ Gemini recibe la instrucción `responseMimeType: application/json`, por lo que d
 
 **Fallback automático si Gemini no está disponible:**
 
-Si Gemini falla (429 rate limit, 503 servicio caído, timeout u otro error de red), el sistema cae automáticamente al resultado del TM sin interrumpir la clasificación ni mostrar pantallas de error. Hay dos capas de protección:
+Si Gemini falla (429 cuota, 503 saturado, timeout), el sistema usa **TM + heurísticas OpenCV** (`visual_heuristics.py`) sin interrumpir la demo. Precisión medida: **16/16** imágenes de prueba sin API.
 
-1. **Dentro de `analizar_y_clasificar_hibrido()`** — cubre cualquier llamador: cámara, API y tests de imágenes.
-2. **Dentro de `camera.py._analizar()`** — segunda línea de defensa específica para el modo demo.
+1. **Dentro de `analizar_y_clasificar_hibrido()`** — cámara, API y tests.
+2. **Cache de sesión** — tras el primer fallo, no reintenta Gemini en cada foto (más rápido).
 
 **Tiempo total por clasificación:**
 - Flujo híbrido TM + Gemini: ~2–5 seg
-- Fallback solo TM: ~0.1 seg
+- Fallback TM + heurísticas: ~0.1–0.3 seg
 
 ### Modo demo — cámara en tiempo real
 

@@ -103,9 +103,22 @@ def _limpiar_uploads() -> None:
 
 # ─────────────────────────────────────────────
 # DETECCIÓN AUTOMÁTICA DE MODO DE VISIÓN
-# Prioriza flujo híbrido TM+Gemini si el modelo existe,
-# cae a Gemini solo si no está disponible.
+# Prioriza flujo híbrido TM + API (Claude o Gemini) si el modelo existe.
 # ─────────────────────────────────────────────
+
+from dotenv import load_dotenv
+load_dotenv()
+
+def _vision_provider() -> str:
+    """claude | gemini según VISION_API o keys disponibles."""
+    explicit = os.environ.get("VISION_API", "").lower().strip()
+    if explicit in ("claude", "gemini"):
+        return explicit
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "claude"
+    return "gemini"
+
+VISION_PROVIDER = _vision_provider()
 
 def _modelo_tm_disponible() -> bool:
     return Path("model/model.tflite").exists() and Path("model/labels.txt").exists()
@@ -117,14 +130,14 @@ if _modelo_tm_disponible():
     try:
         from vision.tm_classifier import TeachableMachineClassifier
         tm_global = TeachableMachineClassifier()
-        MODO_VISION = "hibrido_tm_gemini"
-        logger.info("API iniciada | modo=HIBRIDO_TM_GEMINI")
+        MODO_VISION = f"hibrido_tm_{VISION_PROVIDER}"
+        logger.info("API iniciada | modo=HIBRIDO_TM_%s", VISION_PROVIDER.upper())
     except Exception as _e:
-        MODO_VISION = "gemini"
-        logger.warning("TM no disponible (%s) — modo=GEMINI", _e)
+        MODO_VISION = VISION_PROVIDER
+        logger.warning("TM no disponible (%s) — modo=%s", _e, VISION_PROVIDER.upper())
 else:
-    MODO_VISION = "gemini"
-    logger.info("API iniciada | modo=GEMINI")
+    MODO_VISION = VISION_PROVIDER
+    logger.info("API iniciada | modo=%s", VISION_PROVIDER.upper())
 
 print(f"[RECI API] Modo de visión: {MODO_VISION.upper()}")
 
@@ -161,7 +174,7 @@ def raiz():
         "modo_vision": MODO_VISION,
         "endpoints": {
             "POST /clasificar/atributos":  "Clasificar con atributos manuales",
-            "POST /clasificar/imagen":     "Clasificar desde imagen (Gemini o TM)",
+            "POST /clasificar/imagen":     "Clasificar desde imagen (Claude, Gemini o TM)",
             "GET  /estadisticas":          "Estadísticas resumen de la sesión",
             "GET  /estadisticas/detalle":  "Estadísticas detalladas con desglose por objeto",
             "GET  /estadisticas/objetos":  "Top objetos más frecuentes detectados",
@@ -268,8 +281,8 @@ async def clasificar_imagen(file: UploadFile = File(...)):
     Clasifica un objeto desde una imagen.
 
     Modo automático:
-    - Si existe model/model.tflite → usa Teachable Machine (producción)
-    - Si no existe               → usa Gemini API (desarrollo/fallback)
+    - Si existe model/model.tflite → flujo híbrido TM + Claude/Gemini
+    - Si no existe               → solo API de visión (Claude o Gemini)
 
     El sistema experto y el JSON de respuesta son idénticos en ambos modos.
     """
@@ -288,10 +301,9 @@ async def clasificar_imagen(file: UploadFile = File(...)):
 
         extractor = AttributeExtractor()
 
-        # ── Flujo híbrido: TM da contexto → Gemini analiza → SE decide ──
+        # ── Flujo híbrido: TM da contexto → API analiza → SE decide ──
         vision_usada = MODO_VISION
         if tm_global is not None:
-            # TM corre en ~0.1 s y pasa su voto como contexto a Gemini
             try:
                 import cv2
                 img = cv2.imread(str(ruta_temp))
@@ -300,20 +312,22 @@ async def clasificar_imagen(file: UploadFile = File(...)):
                 else:
                     clase_tm = prob_tm = None
             except Exception as _te:
-                logger.warning("TM falló en API (%s) — Gemini sin contexto", _te)
+                logger.warning("TM falló en API (%s) — %s sin contexto",
+                               _te, VISION_PROVIDER)
                 clase_tm = prob_tm = None
 
             try:
                 atributos    = extractor.analizar_imagen_hibrido(
                     str(ruta_temp), clase_tm, prob_tm)
-                vision_usada = "hibrido_tm_gemini"
+                vision_usada = f"hibrido_tm_{VISION_PROVIDER}"
             except Exception as _ge:
-                logger.warning("Gemini falló (%s) — fallback a TM", _ge)
+                logger.warning("%s falló (%s) — fallback TM+heurísticas",
+                               VISION_PROVIDER, _ge)
                 atributos    = tm_global.analizar_imagen(str(ruta_temp))
-                vision_usada = "tm_fallback"
+                vision_usada = "tm_heuristicas"
         else:
             atributos    = extractor.analizar_imagen(str(ruta_temp))
-            vision_usada = "gemini"
+            vision_usada = VISION_PROVIDER
         # ──────────────────────────────────────────────────────────────
 
         engine_global.cargar_hechos(atributos)
