@@ -1,7 +1,7 @@
 # vision/camera.py
 # Módulo de captura de imagen en tiempo real
 # Modo demo: ESPACIO activa cuenta regresiva → captura → clasifica
-# Flujo: TM (contexto) → Gemini (análisis) → SE (decisión) · fallback TM+OpenCV
+# Flujo: TM (contexto) → API visión (análisis) → SE (decisión) · fallback TM+OpenCV
 # En producción: sensor ultrasónico reemplaza el ESPACIO
 
 import cv2
@@ -83,9 +83,9 @@ class Camera:
         print("  3. Espera el resultado")
         print("  ─────────────────────────────────────────")
         if tm_classifier:
-            print("  🤖 Flujo híbrido: TM (contexto) → Gemini (análisis) → SE (decisión)")
+            print("  🤖 Flujo híbrido: TM (contexto) → API visión (análisis) → SE (decisión)")
         else:
-            print("  🔮 Modo Gemini puro — sin modelo TM disponible")
+            print("  🔮 Modo API visión — sin modelo TM disponible")
         print("  P/V: Corregir resultado  |  Q: Salir\n")
 
         PREVIEW    = "preview"
@@ -447,9 +447,9 @@ if __name__ == "__main__":
     tm_classifier = None
     try:
         tm_classifier = TeachableMachineClassifier()
-        print("  🤖 Modo: TM (contexto) → Gemini (análisis) → SE (decisión)")
+        print("  🤖 Modo: TM (contexto) → API visión (análisis) → SE (decisión)")
     except FileNotFoundError:
-        print("  🔮 Modo: Solo Gemini")
+        print("  🔮 Modo: Solo API visión")
 
     camara = Camera()
 

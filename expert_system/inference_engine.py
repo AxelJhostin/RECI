@@ -256,19 +256,19 @@ class InferenceEngine:
                 "compuerta":    "ninguna",
                 "led":          "rojo",
                 "angulo_servo": 0,
-                "mensaje":      "Depositar en tacho general"
+                "mensaje":      "Objeto no permitido — depositar en tacho general"
             },
             "LATA":        {
                 "compuerta":    "ninguna",
                 "led":          "rojo",
                 "angulo_servo": 0,
-                "mensaje":      "Depositar en tacho general"
+                "mensaje":      "Objeto no permitido — depositar en tacho general"
             },
             "DESCONOCIDO": {
                 "compuerta":    "ninguna",
                 "led":          "rojo",
                 "angulo_servo": 0,
-                "mensaje":      "Depositar en tacho general"
+                "mensaje":      "Objeto no permitido — depositar en tacho general"
             },
         }
         return acciones.get(self.conclusion_final, acciones["DESCONOCIDO"])

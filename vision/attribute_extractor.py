@@ -79,6 +79,24 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
   - papel_servilleta: hoja de papel, servilleta, papel impreso — NO es plástico ni vidrio
   - carton: caja de cartón, cartulina — NO es plástico ni vidrio
   - lata: envase metálico de aluminio — NO va en ningún compartimento de RECI
+    SEÑALES DE LATA (muy importante):
+    - Todo el cuerpo es metal/aluminio plateado O etiqueta impresa sobre metal
+    - Forma cilíndrica UNIFORME (sin cuello de botella, sin hombros marcados)
+    - Apertura superior plana con lengüeta (pull-tab) o anillo — tapa = sellado o sin_tapa
+    - NUNCA tiene rosca de plástico visible — si ves metal o lata de Coca-Cola/Red Bull → objeto_reconocido = lata
+    - brillo = metalico, color = metalico (plateada) o variado_vivo (lata roja/azul con logo)
+    - transparencia = ninguna (las latas NO son transparentes)
+
+  DIFERENCIA CRÍTICA VIDRIO vs PLÁSTICO (botellas):
+  - VIDRIO: brillo MUY nítido y profundo (como espejo), sonido visual "duro", tapa = corona_metalica | twist_off_metalica | tapa_ancha_metalica
+  - PLÁSTICO PET: brillo difuso o moderado, tapa de rosca PLÁSTICA visible (rosca_plastico)
+  - Si el envase es transparente con reflejo nítido fuerte → probable VIDRIO → tapa metálica, NO rosca_plastico
+  - botella_cerveza_vidrio | botella_jugo_vidrio | frasco_vidrio | vaso_vidrio para envases de vidrio
+  - Si el clasificador rápido dijo "vidrio", confía en el material aunque la forma parezca botella de agua
+
+  OBJETOS NO PERMITIDOS (no plástico ni vidrio):
+  - lata, papel_servilleta, carton, tetra_pak, cascara_fruta, restos_comida → usar objeto_reconocido correcto
+  - Objetos de metal que no sean botella → lata o desconocido con confianza_ml = baja
 
   DIFERENCIAS CLAVE para objetos blancos:
   - vaso_plastico_blanco: blanco opaco, CÓNICO o cilíndrico, brillo difuso (plástico), forma de vaso de cafetería
@@ -109,7 +127,9 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 REGLAS DE ANÁLISIS:
 - Analiza SOLO el objeto principal de la imagen
 - Confía en lo que VES — material, brillo, transparencia, forma de la tapa
-- Si el objeto NO es plástico ni vidrio (papel, cartón, lata, orgánico), usa el objeto_reconocido correcto y confianza_ml = baja
+- LATA vs BOTELLA: si es cilindro de metal o lata de bebida → lata (NO botella_gaseosa ni botella_agua)
+- VIDRIO vs PET: reflejo nítido + tapa metálica = vidrio; rosca plástica visible = PET
+- Si el objeto NO es plástico ni vidrio (papel, cartón, lata, metal, orgánico), usa el objeto_reconocido correcto
 - confianza_ml refleja qué tan seguro estás de tu análisis general
 - Si el objeto no está claro o es muy ambiguo, usa confianza_ml = baja y objeto_reconocido = desconocido
 
@@ -433,6 +453,27 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             datos = base64.b64encode(f.read()).decode("utf-8")
         return datos, mime_type
 
+    @staticmethod
+    def _refinar_con_imagen(ruta_imagen: str, atributos: dict,
+                            clase_tm: str = None, prob_tm: float = None) -> dict:
+        """Aplica correcciones OpenCV post-API (lata, vidrio, metal)."""
+        try:
+            import cv2
+            from vision.visual_heuristics import refinar_atributos_api
+            img = cv2.imread(ruta_imagen)
+            if img is None:
+                return atributos
+            antes = atributos.get("objeto_reconocido")
+            refinados = refinar_atributos_api(atributos, img, clase_tm, prob_tm)
+            despues = refinados.get("objeto_reconocido")
+            if despues != antes:
+                logger.info("refinar_api | %s → %s (tm=%s)", antes, despues, clase_tm)
+                print(f"  🔧 Refinado: {antes} → {despues}")
+            return refinados
+        except Exception as e:
+            logger.warning("refinar_api falló: %s", e)
+            return atributos
+
     def analizar_imagen(self, ruta_imagen: str) -> dict:
         """
         Analiza una imagen con Claude o Gemini y retorna los 9 atributos.
@@ -444,6 +485,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
+        atributos = self._refinar_con_imagen(ruta_imagen, atributos)
         logger.info("analizar_imagen OK | provider=%s objeto=%s confianza=%s",
                     self.vision_api, atributos.get("objeto_reconocido"),
                     atributos.get("confianza_ml"))
@@ -487,6 +529,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
+        atributos = self._refinar_con_imagen(ruta_imagen, atributos, clase_tm, prob_tm)
         logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → %s=%s",
                     clase_tm, (prob_tm or 0) * 100, self.vision_api,
                     atributos.get("objeto_reconocido"))

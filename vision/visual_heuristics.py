@@ -209,3 +209,143 @@ def refinar_atributos(atributos: dict, img_bgr: np.ndarray,
         out["confianza_ml"] = "media"
 
     return out
+
+
+def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
+                          clase_tm: str = None, prob_tm: float = None) -> dict:
+    """
+    Post-procesa atributos de Claude/Gemini con OpenCV + contexto TM.
+    Corrige errores frecuentes: latas como botellas, vidrio con rosca_plastico.
+    """
+    senales = extraer_senales_visuales(img_bgr)
+    if not senales or not atributos:
+        return atributos
+
+    out    = dict(atributos)
+    sr     = senales["specular_ratio"]
+    sat    = senales["mean_saturation"]
+    ts     = senales["transparency_score"]
+    aspect = senales["aspect_ratio"]
+    elong  = senales["is_elongated"]
+    ar     = senales["amber_ratio"]
+    gr     = senales["green_ratio"]
+    cap    = senales["contour_area_pct"]
+    wr     = senales["white_ratio"]
+
+    brillo_vidrio    = sr > 0.032
+    es_etiqueta_opaca = sat > 50 and sr < 0.028
+    es_opaco_real    = ts < 28 or es_etiqueta_opaca
+    es_transparente  = ts > 38 and not es_etiqueta_opaca
+
+    obj   = out.get("objeto_reconocido", "")
+    tapa  = out.get("tapa", "")
+    trans = out.get("transparencia", "")
+
+    api_dice_botella = obj in (
+        "botella_agua", "botella_gaseosa", "botella_energizante",
+        "botella_jugo_plastico", "desconocido",
+    )
+    api_dice_transparente_pero_no_lo_es = trans in ("alta", "media") and es_opaco_real
+
+    forma_lata = (
+        0.75 <= aspect <= 1.75
+        and cap > 0.08
+        and out.get("rigidez", "rigido") == "rigido"
+    )
+
+    metal_plateado = (sat < 40 and sr > 0.008) or (sat < 22 and wr > 0.25)
+    metal_mate     = (
+        sat < 25 and ts < 40 and wr > 0.20
+        and clase_tm != "vidrio"
+    )
+
+    # ── Prioridad 1: TM dice vidrio — corregir antes de detectar lata ──
+    if clase_tm == "vidrio" and (prob_tm or 0) >= 0.75:
+        if tapa == "rosca_plastico":
+            out["tapa"] = "twist_off_metalica"
+        if brillo_vidrio or sr > 0.015:
+            out["brillo"] = "alto_nitido"
+        if obj in ("botella_agua", "botella_gaseosa", "botella_energizante",
+                   "botella_fioravanti", "vaso_plastico_blanco", "desconocido"):
+            if gr > ar and gr > 0.07:
+                out.update({"objeto_reconocido": "botella_cerveza_vidrio", "color": "verde_oscuro"})
+            elif ar > 0.07 or out.get("color") in ("ambar", "marron_tierra"):
+                out.update({"objeto_reconocido": "botella_cerveza_vidrio", "color": "ambar",
+                            "transparencia": "ninguna" if es_opaco_real else "media"})
+            elif es_transparente or trans == "alta":
+                out.update({"objeto_reconocido": "botella_jugo_vidrio", "color": "transparente",
+                            "transparencia": "alta"})
+            else:
+                out.update({"objeto_reconocido": "botella_jugo_vidrio"})
+        out["confianza_ml"] = "alta" if (prob_tm or 0) >= 0.88 else "media"
+        return out
+
+    # ── Prioridad 2: señales visuales de vidrio transparente ───────────
+    if brillo_vidrio and es_transparente and tapa == "rosca_plastico":
+        out["tapa"] = "twist_off_metalica"
+        out["brillo"] = "alto_nitido"
+        if obj in ("botella_agua", "botella_gaseosa", "botella_energizante", "desconocido"):
+            out["objeto_reconocido"] = "botella_jugo_vidrio"
+            out["color"] = "transparente"
+            out["transparencia"] = "alta"
+            out["confianza_ml"] = "media"
+        return out
+
+    if brillo_vidrio and es_opaco_real and ar > 0.06:
+        if obj in ("botella_fioravanti", "botella_gaseosa", "botella_agua", "desconocido"):
+            out.update({
+                "objeto_reconocido": "botella_cerveza_vidrio",
+                "color":             "ambar",
+                "transparencia":     "ninguna",
+                "brillo":            "alto_nitido",
+                "tapa":              "twist_off_metalica" if tapa == "rosca_plastico" else tapa,
+                "confianza_ml":      "media",
+            })
+        return out
+
+    # ── Prioridad 3: lata / metal ─────────────────────────────────────
+    parece_lata = (
+        obj == "lata"
+        or (metal_plateado and clase_tm != "vidrio")
+        or metal_mate
+        or (
+            forma_lata
+            and clase_tm != "vidrio"
+            and (
+                metal_plateado
+                or metal_mate
+                or api_dice_transparente_pero_no_lo_es
+                or (trans in ("ninguna", "baja", "media") and tapa in ("rosca_plastico", "sin_tapa", "sellado"))
+                or (sat > 45 and es_opaco_real and api_dice_botella)
+            )
+        )
+    )
+
+    if parece_lata and obj != "papel_servilleta":
+        color_lata = "metalico" if metal_plateado else out.get("color", "variado_vivo")
+        if color_lata not in ("metalico", "variado_vivo", "negro"):
+            color_lata = "variado_vivo"
+        out.update({
+            "objeto_reconocido": "lata",
+            "confianza_ml":      "alta" if metal_plateado else "media",
+            "transparencia":     "ninguna",
+            "color":             color_lata,
+            "forma":             "cilindrica_estandar" if aspect < 1.15 else "cilindrica_delgada",
+            "brillo":            "metalico" if metal_plateado else "medio_difuso",
+            "tapa":              "sellado",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+        })
+        return out
+
+    if api_dice_transparente_pero_no_lo_es and api_dice_botella and forma_lata:
+        out.update({
+            "objeto_reconocido": "lata",
+            "transparencia":     "ninguna",
+            "brillo":            "medio_difuso",
+            "tapa":              "sellado",
+            "confianza_ml":      "media",
+        })
+        return out
+
+    return out

@@ -77,4 +77,24 @@ CASOS_LATA = [
             "tapa": "sin_tapa", "textura": "lisa_brillante", "rigidez": "rigido"
         }
     },
+    {
+        "id": "T60", "nombre": "Lata Coca-Cola — etiqueta roja, tapa sellada (post-refinar API)",
+        "esperado": "LATA", "categoria": "LATA",
+        "atributos": {
+            "objeto_reconocido": "lata", "confianza_ml": "media",
+            "transparencia": "ninguna", "color": "variado_vivo",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "sellado", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "T61", "nombre": "Vidrio transparente — tapa metálica corregida desde rosca_plastico",
+        "esperado": "VIDRIO", "categoria": "LATA",
+        "atributos": {
+            "objeto_reconocido": "botella_jugo_vidrio", "confianza_ml": "media",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
 ]

@@ -789,6 +789,23 @@ class KnowledgeBase:
                           "transparencia": "ninguna"},
                  "VIDRIO", 0.91,
                  "Ámbar opaco nítido rígido sin tapa → frasco de vidrio ámbar (salsa, condimento) sin tapa visible"),
+
+            # ── Lata con etiqueta colorida (Coca-Cola, etc.) ─────────────────
+            Rule("R165", {"objeto_reconocido": "lata", "confianza_ml": "media"},
+                 "LATA", 0.98,
+                 "Lata identificada con confianza media → rechazar (no plástico ni vidrio)"),
+
+            Rule("R166", {"objeto_reconocido": "lata", "color": "variado_vivo",
+                          "transparencia": "ninguna", "tapa": "sellado"},
+                 "LATA", 0.99,
+                 "Lata de bebida con etiqueta colorida (Coca-Cola, etc.) — tacho general"),
+
+            # ── Vidrio transparente con tapa mal detectada como rosca plástica ─
+            Rule("R167", {"transparencia": "alta", "brillo": "alto_nitido",
+                          "tapa": "twist_off_metalica", "rigidez": "rigido",
+                          "forma": "cilindrica_estandar"},
+                 "VIDRIO", 0.94,
+                 "Transparente nítido con tapa metálica → vidrio aunque ML haya confundido material"),
         ]
 
     def obtener_reglas(self):
