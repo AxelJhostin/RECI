@@ -21,7 +21,7 @@ flowchart TD
     J --> K{Conclusión}
     K -->|PLASTICO| L[Compuerta derecha · LED verde · 135°]
     K -->|VIDRIO| M[Compuerta izquierda · LED verde · 45°]
-    K -->|ORGANICO / LATA / DESCONOCIDO| N[Compuerta cerrada · LED rojo · Objeto no permitido]
+    K -->|ORGANICO / LATA / DESCONOCIDO| N[Compuerta cerrada · LED rojo · Material no permitido]
 ```
 
 ---
@@ -133,7 +133,7 @@ La inferencia TM cruda usa `_inferir()` **antes** de las heurísticas OpenCV, pa
 
 **Salida del SE:** `PLASTICO` | `VIDRIO` | `ORGANICO` | `LATA` | `DESCONOCIDO`
 
-**Para la demo (solo 2 tachos):** solo `PLASTICO` y `VIDRIO` abren compuerta. El resto → mensaje de objeto no permitido (LED rojo, compuerta cerrada).
+**Para la demo (solo 2 tachos):** solo `PLASTICO` y `VIDRIO` abren compuerta. El resto → mensaje de material no permitido (LED rojo, compuerta cerrada).
 
 ---
 
