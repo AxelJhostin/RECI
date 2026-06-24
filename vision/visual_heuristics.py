@@ -153,13 +153,17 @@ def refinar_atributos(atributos: dict, img_bgr: np.ndarray,
         return out
 
     # ── 3. VIDRIO cuando TM dice plástico ─────────────────────────────
-    # Solo aplica con señales MUY específicas de vidrio ámbar/verde oscuro.
-    # Evita falsos positivos en PET colorido (Colgate, Powerade) que también brillan.
+    # Solo si TM NO está muy seguro de plástico Y hay señal fuerte ámbar/verde.
+    # Evita convertir botellas PET transparentes en vidrio por reflejos del fondo.
+    tm_seguro_plastico = (
+        clase_tm == "plastico" and prob_tm is not None and prob_tm >= 0.92
+    )
     parece_vidrio = (
-        clase_tm == "plastico"
+        not tm_seguro_plastico
+        and clase_tm == "plastico"
         and brillo_vidrio
-        and ar > 0.10
-        and sat < 55
+        and (gr > 0.10 or ar > 0.14)
+        and sat < 50
     )
     if parece_vidrio:
         if gr > ar and gr > 0.08:
@@ -212,7 +216,8 @@ def refinar_atributos(atributos: dict, img_bgr: np.ndarray,
 
 
 def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
-                          clase_tm: str = None, prob_tm: float = None) -> dict:
+                          clase_tm: str = None, prob_tm: float = None,
+                          prob_vidrio: float = None) -> dict:
     """
     Post-procesa atributos de Claude/Gemini con OpenCV + contexto TM.
     Corrige errores frecuentes: latas como botellas, vidrio con rosca_plastico.
@@ -248,8 +253,8 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
     api_dice_transparente_pero_no_lo_es = trans in ("alta", "media") and es_opaco_real
 
     forma_lata = (
-        0.75 <= aspect <= 1.75
-        and cap > 0.08
+        cap > 0.06
+        and 0.65 <= aspect <= 1.85
         and out.get("rigidez", "rigido") == "rigido"
     )
 
@@ -259,8 +264,21 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         and clase_tm != "vidrio"
     )
 
-    # ── Prioridad 1: TM dice vidrio — corregir antes de detectar lata ──
-    if clase_tm == "vidrio" and (prob_tm or 0) >= 0.75:
+    prob_v = prob_vidrio if prob_vidrio is not None else (
+        prob_tm if clase_tm == "vidrio" else (1.0 - prob_tm if prob_tm else 0.0)
+    )
+    tm_sugiere_vidrio = clase_tm == "vidrio" or prob_v >= 0.06
+    tm_seguro_plastico = (
+        clase_tm == "plastico"
+        and prob_tm is not None
+        and prob_tm >= 0.92
+        and prob_v < 0.06
+    )
+
+    # ── Prioridad 1: TM dice vidrio (o probabilidad vidrio ≥ 6%) ───────
+    if (clase_tm == "vidrio" and (prob_tm or 0) >= 0.75) or (
+        tm_sugiere_vidrio and brillo_vidrio and elong and aspect >= 1.05
+    ):
         if tapa == "rosca_plastico":
             out["tapa"] = "twist_off_metalica"
         if brillo_vidrio or sr > 0.015:
@@ -280,8 +298,30 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         out["confianza_ml"] = "alta" if (prob_tm or 0) >= 0.88 else "media"
         return out
 
+    # ── Prioridad 1b: vidrio ámbar fuerte (Gatorade vidrio, cerveza) ───
+    # Señal ámbar alta + brillo nítido — no confundir con PET claro (ar < 0.08).
+    if brillo_vidrio and ar > 0.14 and sr > 0.038 and sat < 60:
+        if obj in ("botella_agua", "botella_gaseosa", "botella_gatorade",
+                   "botella_energizante", "desconocido"):
+            out.update({
+                "objeto_reconocido": "botella_jugo_vidrio" if ts > 50 else "botella_cerveza_vidrio",
+                "color":             "ambar" if ar > 0.14 else "transparente",
+                "transparencia":     "alta" if ts > 50 else "media",
+                "brillo":            "alto_nitido",
+                "tapa":              "twist_off_metalica" if tapa == "rosca_plastico" else tapa,
+                "forma":             "cilindrica_estandar",
+                "confianza_ml":      "media",
+            })
+            return out
+
     # ── Prioridad 2: señales visuales de vidrio transparente ───────────
-    if brillo_vidrio and es_transparente and tapa == "rosca_plastico":
+    if (
+        not tm_seguro_plastico
+        and tm_sugiere_vidrio
+        and brillo_vidrio
+        and es_transparente
+        and tapa == "rosca_plastico"
+    ):
         out["tapa"] = "twist_off_metalica"
         out["brillo"] = "alto_nitido"
         if obj in ("botella_agua", "botella_gaseosa", "botella_energizante", "desconocido"):
@@ -291,7 +331,13 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
             out["confianza_ml"] = "media"
         return out
 
-    if brillo_vidrio and es_opaco_real and ar > 0.06:
+    if (
+        not tm_seguro_plastico
+        and tm_sugiere_vidrio
+        and brillo_vidrio
+        and es_opaco_real
+        and ar > 0.06
+    ):
         if obj in ("botella_fioravanti", "botella_gaseosa", "botella_agua", "desconocido"):
             out.update({
                 "objeto_reconocido": "botella_cerveza_vidrio",
@@ -304,22 +350,29 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         return out
 
     # ── Prioridad 3: lata / metal ─────────────────────────────────────
-    parece_lata = (
-        obj == "lata"
-        or (metal_plateado and clase_tm != "vidrio")
-        or metal_mate
-        or (
-            forma_lata
-            and clase_tm != "vidrio"
-            and (
-                metal_plateado
-                or metal_mate
-                or api_dice_transparente_pero_no_lo_es
-                or (trans in ("ninguna", "baja", "media") and tapa in ("rosca_plastico", "sin_tapa", "sellado"))
-                or (sat > 45 and es_opaco_real and api_dice_botella)
+    if tm_seguro_plastico:
+        # TM muy seguro de plástico: solo forzar lata si API contradice transparencia
+        parece_lata = (
+            obj == "lata"
+            or (api_dice_transparente_pero_no_lo_es and forma_lata and aspect < 1.40)
+        )
+    else:
+        parece_lata = (
+            obj == "lata"
+            or (metal_plateado and clase_tm != "vidrio")
+            or metal_mate
+            or (
+                forma_lata
+                and clase_tm != "vidrio"
+                and (
+                    metal_plateado
+                    or metal_mate
+                    or api_dice_transparente_pero_no_lo_es
+                    or (trans in ("ninguna", "baja", "media") and tapa in ("rosca_plastico", "sin_tapa", "sellado") and aspect < 1.35)
+                    or (sat > 45 and es_opaco_real and api_dice_botella and aspect < 1.35)
+                )
             )
         )
-    )
 
     if parece_lata and obj != "papel_servilleta":
         color_lata = "metalico" if metal_plateado else out.get("color", "variado_vivo")

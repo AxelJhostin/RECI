@@ -8,7 +8,7 @@ import cv2
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from vision.visual_heuristics import refinar_atributos_api
+from vision.visual_heuristics import refinar_atributos_api, refinar_atributos
 from expert_system.inference_engine import InferenceEngine
 
 
@@ -39,7 +39,7 @@ def test_metal_detectado_como_lata():
         "textura": "lisa_brillante",
         "rigidez": "rigido",
     }
-    out = refinar_atributos_api(attrs, _img_metal_plateado(), "plastico", 0.99)
+    out = refinar_atributos_api(attrs, _img_metal_plateado(), "plastico", 0.85, prob_vidrio=0.15)
     assert out["objeto_reconocido"] == "lata", out
     assert out["brillo"] == "metalico", out
 
@@ -94,9 +94,31 @@ def test_lata_pasa_por_sistema_experto():
     assert "no permitido" in hw["mensaje"].lower()
 
 
+def test_tm_seguro_plastico_no_flip_vidrio():
+    """Botella PET con TM 100% plástico no debe convertirse en vidrio."""
+    img = np.full((224, 224, 3), 200, dtype=np.uint8)
+    cv2.rectangle(img, (88, 20), (136, 200), (180, 210, 220), -1)
+    attrs = {
+        "objeto_reconocido": "botella_agua",
+        "confianza_ml": "alta",
+        "transparencia": "alta",
+        "color": "transparente",
+        "forma": "cilindrica_estandar",
+        "brillo": "medio_difuso",
+        "tapa": "rosca_plastico",
+        "textura": "lisa_brillante",
+        "rigidez": "rigido",
+    }
+    out = refinar_atributos(attrs, img, clase_tm="plastico", prob_tm=0.999)
+    out = refinar_atributos_api(out, img, clase_tm="plastico", prob_tm=0.999, prob_vidrio=0.001)
+    assert out["objeto_reconocido"] == "botella_agua", out
+    assert "vidrio" not in out["objeto_reconocido"]
+
+
 if __name__ == "__main__":
     test_metal_detectado_como_lata()
     test_lata_roja_api_confundio_con_botella()
     test_tm_vidrio_corrige_rosca_plastico()
     test_lata_pasa_por_sistema_experto()
-    print("✅ test_refinar_api: 4/4 OK")
+    test_tm_seguro_plastico_no_flip_vidrio()
+    print("✅ test_refinar_api: 5/5 OK")

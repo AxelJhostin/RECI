@@ -308,17 +308,17 @@ async def clasificar_imagen(file: UploadFile = File(...)):
                 import cv2
                 img = cv2.imread(str(ruta_temp))
                 if img is not None:
-                    _, clase_tm, prob_tm = tm_global.analizar_frame(img)
+                    _, clase_tm, prob_tm, prob_vidrio = tm_global.analizar_frame(img)
                 else:
-                    clase_tm = prob_tm = None
+                    clase_tm = prob_tm = prob_vidrio = None
             except Exception as _te:
                 logger.warning("TM falló en API (%s) — %s sin contexto",
                                _te, VISION_PROVIDER)
-                clase_tm = prob_tm = None
+                clase_tm = prob_tm = prob_vidrio = None
 
             try:
                 atributos    = extractor.analizar_imagen_hibrido(
-                    str(ruta_temp), clase_tm, prob_tm)
+                    str(ruta_temp), clase_tm, prob_tm, prob_vidrio)
                 vision_usada = f"hibrido_tm_{VISION_PROVIDER}"
             except Exception as _ge:
                 logger.warning("%s falló (%s) — fallback TM+heurísticas",

@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 
-from vision.visual_heuristics import refinar_atributos
+from vision.visual_heuristics import refinar_atributos, refinar_atributos_api
 
 
 class TeachableMachineClassifier:
@@ -501,15 +501,20 @@ class TeachableMachineClassifier:
             atributos["confianza_ml"] = confianza_nivel
 
         atributos = refinar_atributos(atributos, img, clase_tm=clase, prob_tm=prob)
+        prob_vidrio = float(todas.get("vidrio", 0.0))
+        atributos = refinar_atributos_api(
+            atributos, img, clase_tm=clase, prob_tm=prob, prob_vidrio=prob_vidrio
+        )
         print(f"  ✅ Atributos extraídos: {atributos}")
         return atributos
 
-    def analizar_frame(self, frame_bgr: np.ndarray) -> dict:
+    def analizar_frame(self, frame_bgr: np.ndarray):
         """
         Versión para cámara en tiempo real — recibe frame OpenCV directamente.
         """
-        clase, prob, _ = self._inferir(frame_bgr)
+        clase, prob, todas = self._inferir(frame_bgr)
         confianza_nivel = self._nivel_confianza(prob)
+        prob_vidrio = float(todas.get("vidrio", 0.0))
 
         atributos_base = self.MAPA_CLASES.get(clase)
         if atributos_base is None:
@@ -529,7 +534,10 @@ class TeachableMachineClassifier:
             atributos["confianza_ml"] = confianza_nivel
 
         atributos = refinar_atributos(atributos, frame_bgr, clase_tm=clase, prob_tm=prob)
-        return atributos, clase, prob
+        atributos = refinar_atributos_api(
+            atributos, frame_bgr, clase_tm=clase, prob_tm=prob, prob_vidrio=prob_vidrio
+        )
+        return atributos, clase, prob, prob_vidrio
 
     def analizar_y_clasificar(self, ruta_imagen: str) -> dict:
         """

@@ -54,11 +54,13 @@ def clasificar_imagen(ruta, clf, extractor):
         return "ERROR", 0.0, "error", 0.0, "—", {}
 
     with contextlib.redirect_stdout(io.StringIO()):
-        _, clase_tm, prob_tm = clf.analizar_frame(img)
+        _, clase_tm, prob_tm, prob_vidrio = clf.analizar_frame(img)
 
     try:
         with contextlib.redirect_stdout(io.StringIO()):
-            atributos = extractor.analizar_imagen_hibrido(ruta, clase_tm, prob_tm)
+            atributos = extractor.analizar_imagen_hibrido(
+                ruta, clase_tm, prob_tm, prob_vidrio
+            )
         metodo = "Hibrido"
     except Exception:
         with contextlib.redirect_stdout(io.StringIO()):

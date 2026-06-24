@@ -172,7 +172,14 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                     "VISION_API=claude pero ANTHROPIC_API_KEY no está en .env"
                 )
             modelo = os.environ.get("CLAUDE_MODEL", "").strip()
-            self.modelos = [modelo] if modelo else list(self.CLAUDE_MODELS)
+            if modelo.endswith("-5s"):
+                modelo = modelo[:-1]
+            self.modelos = []
+            if modelo:
+                self.modelos.append(modelo)
+            for m in self.CLAUDE_MODELS:
+                if m not in self.modelos:
+                    self.modelos.append(m)
         elif self.vision_api == "gemini":
             self.api_key = os.environ.get("GEMINI_API_KEY", "")
             if not self.api_key:
@@ -455,7 +462,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
 
     @staticmethod
     def _refinar_con_imagen(ruta_imagen: str, atributos: dict,
-                            clase_tm: str = None, prob_tm: float = None) -> dict:
+                            clase_tm: str = None, prob_tm: float = None,
+                            prob_vidrio: float = None) -> dict:
         """Aplica correcciones OpenCV post-API (lata, vidrio, metal)."""
         try:
             import cv2
@@ -464,7 +472,9 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             if img is None:
                 return atributos
             antes = atributos.get("objeto_reconocido")
-            refinados = refinar_atributos_api(atributos, img, clase_tm, prob_tm)
+            refinados = refinar_atributos_api(
+                atributos, img, clase_tm, prob_tm, prob_vidrio=prob_vidrio
+            )
             despues = refinados.get("objeto_reconocido")
             if despues != antes:
                 logger.info("refinar_api | %s → %s (tm=%s)", antes, despues, clase_tm)
@@ -514,7 +524,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
 
     def analizar_imagen_hibrido(self, ruta_imagen: str,
                                 clase_tm: str = None,
-                                prob_tm: float = None) -> dict:
+                                prob_tm: float = None,
+                                prob_vidrio: float = None) -> dict:
         """
         Flujo híbrido: Claude o Gemini SIEMPRE analiza la imagen.
         Si se pasa el resultado del TM, lo incluye como contexto en el prompt.
@@ -529,7 +540,9 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
-        atributos = self._refinar_con_imagen(ruta_imagen, atributos, clase_tm, prob_tm)
+        atributos = self._refinar_con_imagen(
+            ruta_imagen, atributos, clase_tm, prob_tm, prob_vidrio
+        )
         logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → %s=%s",
                     clase_tm, (prob_tm or 0) * 100, self.vision_api,
                     atributos.get("objeto_reconocido"))
@@ -558,20 +571,23 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         # ── Paso 1: TM como contexto ───────────────────────────────────
         clase_tm = None
         prob_tm  = None
+        prob_vidrio = None
 
         if clf is not None:
             try:
                 import cv2
                 img = cv2.imread(ruta_imagen)
                 if img is not None:
-                    _, clase_tm, prob_tm = clf.analizar_frame(img)
+                    _, clase_tm, prob_tm, prob_vidrio = clf.analizar_frame(img)
                     print(f"  🤖 TM: {clase_tm} ({prob_tm:.1%}) — pasa a {self._provider_label} como contexto")
             except Exception as e:
                 print(f"  ⚠ TM falló ({e}), {self._provider_label} continúa sin contexto")
 
         # ── Paso 2: API de visión (fallback a TM si falla) ───────────────
         try:
-            atributos = self.analizar_imagen_hibrido(ruta_imagen, clase_tm, prob_tm)
+            atributos = self.analizar_imagen_hibrido(
+                ruta_imagen, clase_tm, prob_tm, prob_vidrio
+            )
         except Exception as e:
             motivo = self._mensaje_error_api(e, self.vision_api)
             print(f"  ⚠ {self._provider_label} no disponible ({motivo}) — usando TM + heurísticas visuales")
