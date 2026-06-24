@@ -14,6 +14,7 @@ import os
 import json
 import base64
 import logging
+import time
 import httpx
 from pathlib import Path
 
@@ -32,8 +33,15 @@ class AttributeExtractor:
 
     GEMINI_URL = (
         "https://generativelanguage.googleapis.com/v1beta/models"
-        "/gemini-2.5-flash:generateContent"
+        "/{model}:generateContent"
     )
+
+    # Modelos en orden de preferencia; se prueba el siguiente si hay 429/503
+    GEMINI_MODELS = [
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+    ]
 
     # Le indica a Gemini que devuelva JSON puro, sin markdown ni explicaciones.
     _GENERATION_CONFIG = {
@@ -126,6 +134,9 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 "GEMINI_API_KEY no configurada. "
                 "Agrega GEMINI_API_KEY=tu_key en el archivo .env"
             )
+        # Si Gemini falla en la primera imagen, no reintentar en las siguientes
+        self._gemini_activo = True
+        self._gemini_error   = None
 
     @staticmethod
     def _parsear_json(texto: str) -> dict:
@@ -148,6 +159,77 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             if inicio != -1 and fin > inicio:
                 return json.loads(texto[inicio:fin])
             raise
+
+    def _llamar_gemini(self, payload: dict, max_reintentos: int = 1) -> dict:
+        """
+        Llama a la API de Gemini con reintentos y fallback entre modelos.
+        Lanza la última excepción si todos los intentos fallan.
+        """
+        if not self._gemini_activo:
+            raise RuntimeError(self._gemini_error or "Gemini no disponible en esta sesión")
+
+        ultimo_error = None
+        cuota_agotada = False
+
+        for modelo in self.GEMINI_MODELS:
+            if cuota_agotada:
+                break
+
+            url = self.GEMINI_URL.format(model=modelo) + f"?key={self.api_key}"
+
+            for intento in range(max_reintentos + 1):
+                try:
+                    response = httpx.post(url, json=payload, timeout=30.0)
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError as e:
+                    ultimo_error = e
+                    status = e.response.status_code
+                    if status == 429:
+                        cuota_agotada = True
+                        logger.warning("Gemini %s HTTP 429 — cuota agotada", modelo)
+                        break
+                    if status == 503 and intento < max_reintentos:
+                        espera = 1.0 * (intento + 1)
+                        logger.warning("Gemini %s HTTP 503 — reintento %d en %.1fs",
+                                       modelo, intento + 1, espera)
+                        time.sleep(espera)
+                        continue
+                    if status in (503, 404):
+                        logger.warning("Gemini %s HTTP %s — probando siguiente modelo",
+                                       modelo, status)
+                        break
+                    raise
+                except httpx.RequestError as e:
+                    ultimo_error = e
+                    if intento < max_reintentos:
+                        time.sleep(0.5)
+                        continue
+                    break
+
+        if ultimo_error:
+            self._gemini_activo = False
+            self._gemini_error  = self._mensaje_error_gemini(ultimo_error)
+            raise ultimo_error
+        raise RuntimeError("Gemini: sin respuesta de ningún modelo")
+
+    @staticmethod
+    def _mensaje_error_gemini(error: Exception) -> str:
+        """Genera mensaje legible según el tipo de error de Gemini."""
+        if isinstance(error, httpx.HTTPStatusError):
+            status = error.response.status_code
+            if status == 429:
+                return "cuota agotada (429) — revisa billing en Google AI Studio"
+            if status == 503:
+                return "servidor saturado (503) — intenta en unos minutos"
+            if status == 403:
+                return "API key inválida (403)"
+            return f"HTTP {status}"
+        return error.__class__.__name__
+
+    @staticmethod
+    def _extraer_texto_respuesta(data: dict) -> str:
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     def _imagen_a_base64(self, ruta_imagen: str) -> tuple:
         """Convierte imagen a base64 y detecta el tipo MIME."""
@@ -189,11 +271,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             "generationConfig": self._GENERATION_CONFIG,
         }
 
-        url = f"{self.GEMINI_URL}?key={self.api_key}"
-        response = httpx.post(url, json=payload, timeout=60.0)
-        response.raise_for_status()
-        data  = response.json()
-        texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        data  = self._llamar_gemini(payload)
+        texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
         logger.info("analizar_imagen OK | objeto=%s confianza=%s",
@@ -268,11 +347,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             "generationConfig": self._GENERATION_CONFIG,
         }
 
-        url      = f"{self.GEMINI_URL}?key={self.api_key}"
-        response = httpx.post(url, json=payload, timeout=60.0)
-        response.raise_for_status()
-        data  = response.json()
-        texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        data  = self._llamar_gemini(payload)
+        texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
         logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → gemini=%s",
@@ -321,7 +397,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         try:
             atributos = self.analizar_imagen_hibrido(ruta_imagen, clase_tm, prob_tm)
         except Exception as e:
-            print(f"  ⚠ Gemini no disponible ({e.__class__.__name__}) — usando TM como fallback")
+            motivo = self._mensaje_error_gemini(e)
+            print(f"  ⚠ Gemini no disponible ({motivo}) — usando TM + heurísticas visuales")
             if clf is None:
                 try:
                     from vision.tm_classifier import TeachableMachineClassifier

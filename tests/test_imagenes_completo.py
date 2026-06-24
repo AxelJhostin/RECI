@@ -27,7 +27,7 @@ from expert_system.inference_engine import InferenceEngine
 IMAGENES = [
     ("images/prueba1.jpeg",  "Botella agua plástico",           "PLASTICO"),
     ("images/prueba2.jpeg",  "Botella plástico con atomizador", "PLASTICO"),
-    ("images/prueba3.jpeg",  "Papel",                           "DESCONOCIDO"),
+    ("images/prueba3.jpeg",  "Papel",                           "ORGANICO"),
     ("images/prueba4.jpeg",  "Botella perfume plástico",        "PLASTICO"),
     ("images/prueba5.jpeg",  "Colgate Plax plástico",           "PLASTICO"),
     ("images/prueba6.jpeg",  "Colgate Plax por atrás",          "PLASTICO"),
@@ -61,11 +61,11 @@ def clasificar_imagen(ruta, clf, extractor):
         with contextlib.redirect_stdout(io.StringIO()):
             atributos = extractor.analizar_imagen_hibrido(ruta, clase_tm, prob_tm)
         metodo = "Hibrido"
-    except Exception:
-        # Fallback: TM solo si Gemini falla (sin internet, rate limit, etc.)
+    except Exception as e:
+        # Fallback: TM + heurísticas visuales si Gemini falla
         with contextlib.redirect_stdout(io.StringIO()):
-            atributos, _, _ = clf.analizar_frame(img)
-        metodo = "TM-solo"
+            atributos = clf.analizar_imagen(ruta)
+        metodo = "TM+heurísticas"
 
     engine = InferenceEngine()
     engine.cargar_hechos(atributos)
@@ -135,8 +135,8 @@ def ejecutar_pruebas():
 
         if metodo == "Hibrido":
             print(f"  Gemini detectó : {gemini_obj}")
-        elif metodo == "TM-solo":
-            print(f"  Gemini         : ❌ falló — se usó TM como fallback")
+        elif metodo == "TM+heurísticas":
+            print(f"  Gemini         : ❌ falló — se usó TM + heurísticas visuales (OpenCV)")
 
         print(f"  Objeto → {atributos.get('objeto_reconocido','?')} | "
               f"Confianza ML → {atributos.get('confianza_ml','?')}")
@@ -159,7 +159,7 @@ def ejecutar_pruebas():
     print(f"{'─'*72}")
     print(f"  Precisión     : {aprobados}/{total} ({pct:.1f}%)")
     print(f"  Híbrido TM+Gemini : {con_gemini} imágenes")
-    print(f"  Solo TM (fallback): {total - con_gemini} imágenes")
+    print(f"  Solo TM+heurísticas (fallback): {total - con_gemini} imágenes")
     print(f"{'─'*72}")
     print(f"  ⏱  TIEMPOS")
     print(f"  Promedio  : {t_promedio:.2f}s por imagen")

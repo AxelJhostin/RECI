@@ -6,6 +6,8 @@ import numpy as np
 import cv2
 from pathlib import Path
 
+from vision.visual_heuristics import refinar_atributos
+
 
 class TeachableMachineClassifier:
     """
@@ -498,6 +500,7 @@ class TeachableMachineClassifier:
             atributos = dict(atributos_base)
             atributos["confianza_ml"] = confianza_nivel
 
+        atributos = refinar_atributos(atributos, img, clase_tm=clase, prob_tm=prob)
         print(f"  ✅ Atributos extraídos: {atributos}")
         return atributos
 
@@ -525,6 +528,7 @@ class TeachableMachineClassifier:
             atributos = dict(atributos_base)
             atributos["confianza_ml"] = confianza_nivel
 
+        atributos = refinar_atributos(atributos, frame_bgr, clase_tm=clase, prob_tm=prob)
         return atributos, clase, prob
 
     def analizar_y_clasificar(self, ruta_imagen: str) -> dict:

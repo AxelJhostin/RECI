@@ -127,7 +127,8 @@ RECI/
 │
 ├── vision/
 │   ├── tm_classifier.py        # Clasificador MobileNetV2 (.tflite) — módulo principal
-│   ├── attribute_extractor.py  # Extractor con Gemini API (fallback inteligente)
+│   ├── attribute_extractor.py  # Extractor Gemini API + fallback TM+heurísticas
+│   ├── visual_heuristics.py    # Análisis OpenCV cuando Gemini no está disponible
 │   └── camera.py               # Captura en tiempo real — modo demo (ESPACIO) + producción
 │
 ├── api/
@@ -1065,6 +1066,32 @@ uvicorn api.app:app --reload --port 8000
 
 ## Changelog — historial de cambios
 
+### Junio 2026 — v2.5 (fallback TM+heurísticas OpenCV + resiliencia Gemini)
+
+**Problema resuelto:** cuando Gemini falla (cuota 429, servidor 503), el TM solo
+tenía 2 clases (`plastico`/`vidrio`) y mapeaba todo a atributos genéricos incorrectos
+(papel→plástico, Gatorade vidrio→plástico, vaso café→vidrio).
+
+**`vision/visual_heuristics.py`** (nuevo)
+- Análisis OpenCV de brillo, color, forma y textura sin red externa.
+- Detecta papel plano blanco → `papel_servilleta` (rechazado como ORGANICO).
+- Corrige TM vidrio→plástico en vasos mate de cafetería (sin brillo nítido).
+- Corrige TM plástico→vidrio en botellas ámbar con brillo nítido y baja saturación.
+
+**`vision/tm_classifier.py`**
+- Integra `refinar_atributos()` después de cada inferencia TM.
+
+**`vision/attribute_extractor.py`**
+- Reintentos y fallback entre modelos Gemini (`2.5-flash`, `2.5-flash-lite`, `2.0-flash`).
+- Cache de sesión: si Gemini falla una vez, las siguientes imágenes van directo a TM+heurísticas.
+- Mensajes de error claros: `cuota agotada (429)`, `servidor saturado (503)`.
+
+**`tests/test_imagenes_completo.py`**
+- 16/16 imágenes reales aprobadas sin Gemini (solo TM+heurísticas).
+- Papel esperado actualizado a ORGANICO (correcto — se rechaza igual que DESCONOCIDO).
+
+---
+
 ### Junio 2026 — v2.4 (robustez de vidrio sin tapa: nuevas reglas + MR16)
 
 **`expert_system/knowledge_base.py`**
@@ -1187,4 +1214,4 @@ uvicorn api.app:app --reload --port 8000
 
 ---
 
-*Última actualización: Junio 2026 — v2.4 · Sistema experto 174 reglas · 16 meta-reglas · 34 objetos reconocidos · 108/108 tests · Dashboard de estadísticas*
+*Última actualización: Junio 2026 — v2.5 · 174 reglas · 16 meta-reglas · Fallback TM+OpenCV · 108/108 + 16/16 tests*
