@@ -26,7 +26,8 @@
 15. [Alineación académica IS502](#alineación-académica-is502)
 16. [División del equipo](#división-del-equipo)
 17. [Estado actual](#estado-actual)
-18. [Changelog — historial de cambios](#changelog--historial-de-cambios)
+18. [Roadmap — demo funcional (semana PAO 2026)](#roadmap--demo-funcional-semana-pao-2026)
+19. [Changelog — historial de cambios](#changelog--historial-de-cambios)
 
 ---
 
@@ -1116,6 +1117,7 @@ uvicorn api.app:app --reload --port 8000
 
 ### En progreso 🔄
 
+- **Roadmap demo funcional** — ver sección [Roadmap](#roadmap--demo-funcional-semana-pao-2026) (mejoras A1–A8 en código, luego validación y setup físico)
 - Verificación en vivo con cámara usando Claude Haiku (confirmar que el modelo en `.env` responde sin 404)
 - Integración con hardware físico
 
@@ -1143,6 +1145,135 @@ uvicorn api.app:app --reload --port 8000
 | Robot detecta y se detiene ante obstáculos | ≤ 20 cm | Pendiente |
 
 ---
+
+---
+
+## Roadmap — demo funcional (semana PAO 2026)
+
+> **Para agentes / desarrolladores:** esta sección es la fuente de verdad del plan de mejoras.  
+> Ir marcando `[x]` al completar cada ítem. **Orden estricto en Bloque A** — no saltar tareas.  
+> Tras cada ítem de código: correr la [verificación diaria](#verificación-diaria) antes de continuar.
+
+### Meta de la semana
+
+Demo estable en laptop con cámara:
+
+- **Plástico y vidrio** comunes del campus → compuerta correcta
+- **Lata, papel, cartón, orgánico, desconocido** → rechazo con *"Material no permitido — depositar en tacho general"*
+- **Si hay duda** → rechazar (no abrir compuerta equivocada)
+- **Trazabilidad** cuando algo falle (logs con atributos, reglas y proveedor de visión)
+
+**Criterio de éxito (viernes):**
+
+| Métrica | Objetivo |
+|---------|----------|
+| Tests automatizados | 110/110 SE · 5/5 refinamiento · 16/16 imágenes |
+| Batería manual campus | ≥ 18/20 objetos correctos |
+| Claude en vivo | Activo en cámara (no fallback silencioso por 404) |
+
+### Problemas conocidos (punto de partida)
+
+| Problema | Impacto | Tarea relacionada |
+|----------|---------|-------------------|
+| Typo `CLAUDE_MODEL=claude-haiku-4-5s` → HTTP 404 | Todo cae a fallback TM sin aviso claro | A1 |
+| R19_M: `botella_gatorade` → PLASTICO siempre | Gatorade vidrio clasificado mal | A3 |
+| Backward chaining solo **advierte**, no corrige | Forward gana aunque backward tenga score alto | A2 |
+| Botones P/V en cámara no persisten | Se pierden correcciones útiles para dataset | A7 |
+| SE depende de atributos de API/OpenCV | Basura entra → basura sale | A4, A6 |
+| Una sola foto por captura | Inestabilidad con movimiento / luz variable | A5 |
+| Solo 16 imágenes en batch automático | Poca cobertura de casos reales | A8, B1 |
+
+### Bloque A — Código (prioridad; orden estricto)
+
+- [ ] **A1 — Blindar configuración de visión**  
+  Verificar `.env` (`VISION_API=claude`, `CLAUDE_MODEL=claude-haiku-4-5`). Al iniciar cámara/API, mostrar proveedor y modelo activos. Si API falla, mensaje visible (no fallback silencioso).  
+  *Archivos:* `vision/attribute_extractor.py`, `vision/camera.py`, `api/app.py`  
+  *Listo cuando:* cámara clasifica con Claude visible en consola.
+
+- [ ] **A2 — Política de decisión conservadora**  
+  Umbral mínimo de CF para abrir PLASTICO/VIDRIO (ej. 0.75). Si forward ≠ backward y backward score > 0.80 → `DESCONOCIDO`. Si CF final bajo umbral → rechazo.  
+  *Archivos:* `expert_system/inference_engine.py`  
+  *Listo cuando:* casos ambiguos van a rechazo; tests SE siguen 110/110.
+
+- [ ] **A3 — Reglas producto vs material**  
+  Condicionar reglas por marca (Gatorade, etc.) con atributos físicos (`tapa`, `brillo`). Gatorade + brillo nítido + tapa metálica → VIDRIO; rosca plástica → PLASTICO.  
+  *Archivos:* `expert_system/knowledge_base.py`, tests si aplica  
+  *Listo cuando:* `prueba10.jpeg` (Gatorade vidrio) y `prueba12.jpeg` (Gatorade plástico) pasan.
+
+- [ ] **A4 — Consenso TM + OpenCV + SE**  
+  Formalizar vetos cuando capas se contradicen (TM ≥92% plástico + brillo difuso → no flip a vidrio; metal/lata → LATA).  
+  *Archivos:* `vision/visual_heuristics.py`, capa previa a SE en `attribute_extractor.py` o `tm_classifier.py`  
+  *Listo cuando:* `test_refinar_api.py` 5/5 y sin regresiones en batch 16/16.
+
+- [ ] **A5 — Triple captura + voto mayoritario**  
+  Tras countdown: 3 fotos (~0.3 s). Mayoría gana; empate o tres distintos → `DESCONOCIDO`.  
+  *Archivos:* `vision/camera.py`  
+  *Listo cuando:* mismo objeto con mano temblorosa da resultado estable.
+
+- [ ] **A6 — Logging completo por clasificación**  
+  Guardar en `logs/clasificaciones.jsonl`: imagen, TM, atributos antes/después de `refinar_atributos_api`, conclusión, CF, reglas disparadas, backward, proveedor.  
+  *Archivos:* `vision/camera.py`, `vision/attribute_extractor.py`, `api/app.py`  
+  *Listo cuando:* un fallo se explica leyendo una línea del log.
+
+- [ ] **A7 — Persistir correcciones P/V**  
+  Al pulsar P o V: `logs/correcciones.jsonl` + copiar imagen a `fotos_dataset/plastico/` o `vidrio/`.  
+  *Archivos:* `vision/camera.py`  
+  *Listo cuando:* corrección manual deja archivo en disco.
+
+- [ ] **A8 — Ampliar tests automatizados**  
+  Tests de umbral CF (A2), Gatorade vidrio/plástico (A3), capturas nuevas en `test_imagenes_completo.py`.  
+  *Archivos:* `tests/`  
+  *Listo cuando:* suite completa verde sin regresiones.
+
+### Bloque B — Validación (después de Bloque A)
+
+- [ ] **B1 — Batería manual 20 objetos**  
+  Checklist fijo campus (PET, vidrio, lata, papel, Tetra Pak, vaso blanco, etc.). Anotar causa de cada fallo: captura / API / OpenCV / SE / umbral. Meta: ≥ 18/20.
+
+- [ ] **B2 — Ajuste fino post-batería**  
+  Solo corregir lo que falló en B1. Sin features nuevas.
+
+### Bloque C — Fuera de código (viernes o fin de semana)
+
+- [ ] **C1 — Setup físico de captura**  
+  Fondo uniforme, luz LED frontal, objeto centrado (~40–60% del frame). Repetir B1 y comparar %.
+
+- [ ] **C2 — Dataset (solo fallos de B1)**  
+  `tomar_fotos.py` en modo ráfaga para casos que fallaron. Prioridad: vidrio difícil, vasos opacos, Gatorade vidrio. Subir a Drive; reentrenar en Colab si hay tiempo.
+
+- [ ] **C3 — Hardware (si el equipo lo tiene listo)**  
+  Conectar `decision_hardware()` a servo/LED. Regla: sin confianza alta → servo 0°. No bloquea demo en laptop.
+
+### Calendario sugerido
+
+| Día | Foco | Entregables |
+|-----|------|-------------|
+| Lunes | A1 + A2 | Claude OK en vivo; umbral conservador |
+| Martes | A3 + A4 | Reglas material; consenso capas |
+| Miércoles | A5 + A6 + A7 | Triple captura; logs; correcciones P/V |
+| Jueves | A8 + B1 + B2 | Tests verdes; batería 20 objetos |
+| Viernes | C1 + C2 (+ C3) | Setup físico; fotos de fallos; ensayo demo |
+
+### Verificación diaria
+
+```bash
+python3 tests/test_cases.py
+python3 tests/test_refinar_api.py
+python3 tests/test_imagenes_completo.py
+# Opcional: python3 vision/camera.py  → 3 objetos rápidos
+```
+
+### Cómo continuar en un chat nuevo (Cursor Agent)
+
+1. Abrir repo `RECI`, branch `main`.
+2. Leer esta sección y [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md).
+3. Buscar el **primer ítem sin marcar `[x]`** en Bloque A.
+4. Decir: *"Empecemos con A1"* (o el siguiente pendiente).
+5. Tras completar: marcar `[x]` en este README, correr verificación diaria, commit si el usuario lo pide.
+
+### Fuera de alcance esta semana
+
+- Reescribir el SE completo · modelo TM de 3 clases (`otro`) · dashboard nube · app móvil · reentrenamiento masivo del dataset
 
 ---
 
@@ -1333,4 +1464,4 @@ tenía 2 clases (`plastico`/`vidrio`) y mapeaba todo a atributos genéricos inco
 
 ---
 
-*Última actualización: Junio 2026 — v2.7 · 174 reglas · 16 meta-reglas · Claude Haiku + refinamiento OpenCV · 110/110 + 16/16 + 5/5 tests*
+*Última actualización: Junio 2026 — v2.7 · Roadmap demo A1–C3 · 174 reglas · Claude Haiku · 110/110 + 16/16 + 5/5 tests*
