@@ -216,6 +216,17 @@ python3 scripts/estimar_costo_gemini.py images/prueba10.jpeg
 | `POST /clasificar/imagen` | API REST (subir foto) |
 | `python3 tests/test_imagenes_completo.py` | Prueba batch 16 imágenes |
 | `AttributeExtractor.analizar_y_clasificar_hibrido()` | Orquestador central |
+| `RECI_entrenar_automatico.ipynb` | Reentrenar MobileNetV2 (Colab, Ejecutar todo) |
+
+---
+
+## Documentación relacionada
+
+| Documento | Contenido |
+|-----------|-----------|
+| [README.md](../README.md) | Guía principal del proyecto |
+| [ENTRENAMIENTO_MODELO.md](ENTRENAMIENTO_MODELO.md) | Captura de fotos, Drive, Colab, despliegue `.tflite` |
+| [diagramas/arquitectura_reci.png](diagramas/arquitectura_reci.png) | Diagrama de arquitectura (PNG) |
 
 ---
 

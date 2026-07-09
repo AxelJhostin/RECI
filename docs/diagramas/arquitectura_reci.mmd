@@ -1,0 +1,26 @@
+flowchart TD
+    A(["👤 Usuario deposita objeto"]) --> B["📷 Cámara<br/>Captura JPG 1280×720"]
+    B --> C["⚙️ Preprocesamiento<br/>224×224 · Normalizar RGB"]
+    C --> D["🧠 MobileNetV2 (.tflite)<br/>~0.1 s · plastico | vidrio"]
+    D --> E{"API de visión<br/>disponible?"}
+    E -->|Sí| F["☁️ Claude Haiku / Gemini<br/>~2 s · 9 atributos visuales"]
+    E -->|No| G["🔧 TM + Heurísticas OpenCV<br/>Fallback automático"]
+    F --> H["🔍 Refinamiento OpenCV<br/>Corrige latas, metal, vidrio"]
+    G --> H
+    H --> I["📋 Sistema Experto<br/>174 reglas · CF MYCIN"]
+    I --> J{"Decisión final"}
+    J -->|VIDRIO| K["◀ Compuerta izquierda<br/>Servo 45° · LED azul"]
+    J -->|PLÁSTICO| L["▶ Compuerta derecha<br/>Servo 135° · LED verde"]
+    J -->|RECHAZO| M["✕ Compuerta cerrada<br/>Servo 0° · LED rojo"]
+    K --> N["🗑️ Contenedor vidrio"]
+    L --> O["🗑️ Contenedor plástico"]
+    M --> P["Material no permitido<br/>depositar en tacho general"]
+
+    style A fill:#E8F4FD,stroke:#1565C0,color:#0D47A1
+    style D fill:#FFF3E0,stroke:#EF6C00,color:#E65100
+    style F fill:#F3E5F5,stroke:#7B1FA2,color:#4A148C
+    style G fill:#FFF8E1,stroke:#F9A825,color:#F57F17
+    style I fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    style K fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
+    style L fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    style M fill:#FFEBEE,stroke:#C62828,color:#B71C1C

@@ -1,20 +1,36 @@
-# tomar_fotos.py
+# tomar_fotos.py — Recolector local de fotos para el dataset RECI
+# Ver docs/ENTRENAMIENTO_MODELO.md para el flujo completo (Drive + Colab)
 import cv2
 import os
 import sys
 import time
 
+EXTENSIONES = (".jpg", ".jpeg", ".png", ".webp")
+
 if len(sys.argv) < 2:
     print("Uso: python3 tomar_fotos.py <clase>")
     print("Ejemplo: python3 tomar_fotos.py plastico")
+    print("Clases válidas: plastico, vidrio")
     sys.exit(1)
 
-CLASE   = sys.argv[1]
+CLASE = sys.argv[1].lower()
+if CLASE not in ("plastico", "vidrio"):
+    print(f"Clase no válida: {CLASE!r}. Usa plastico o vidrio.")
+    sys.exit(1)
+
 CARPETA = f"fotos_dataset/{CLASE}"
 os.makedirs(CARPETA, exist_ok=True)
 
+
+def contar_fotos(carpeta: str) -> int:
+    return sum(
+        1 for f in os.listdir(carpeta)
+        if f.lower().endswith(EXTENSIONES)
+    )
+
+
 cap      = cv2.VideoCapture(0)
-contador = len(os.listdir(CARPETA))
+contador = contar_fotos(CARPETA)
 modo_rafaga   = False
 ultima_foto   = 0
 INTERVALO     = 0.2   # segundos entre fotos en modo ráfaga
@@ -27,7 +43,7 @@ print(f"Guardando en: {CARPETA}")
 print()
 print("CONTROLES:")
 print("  ESPACIO → una foto")
-print("  R       → ráfaga automática (1 foto cada 2 seg durante 60 seg)")
+print("  R       → ráfaga automática (1 foto cada 0.2 s durante 60 s)")
 print("  Q       → salir")
 
 while True:
@@ -76,10 +92,12 @@ while True:
         modo_rafaga   = True
         inicio_rafaga = time.time()
         ultima_foto   = 0
-        print(f"\n  Ráfaga iniciada — 30 fotos en 60 segundos, mueve el objeto!")
+        print(f"\n  Ráfaga iniciada — ~300 fotos max en 60 s (0.2 s/foto), mueve el objeto!")
 
 cap.release()
 cv2.destroyAllWindows()
 print(f"\nListo — {contador} fotos en {CARPETA}/")
-print(f"Sube la carpeta a Drive en:")
-print(f"  Mi unidad/data set axel 1/separados/{CLASE}/")
+print("Sube las fotos a Google Drive en:")
+print(f"  Mi unidad/RECI_dataset_propio/{CLASE}/")
+print("Luego abre RECI_entrenar_automatico.ipynb en Colab → Ejecutar todo.")
+print("Guía: docs/ENTRENAMIENTO_MODELO.md")

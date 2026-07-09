@@ -5,7 +5,9 @@ __pycache__/
 *.pyo
 .DS_Store
 model/
-fotos_dataset
-capturas
+model_nuevo/
+fotos_dataset/
+capturas/
 images/api_uploads/
+images/capturas/
 logs/

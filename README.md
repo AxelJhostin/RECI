@@ -29,6 +29,8 @@
 18. [Roadmap — demo funcional (semana PAO 2026)](#roadmap--demo-funcional-semana-pao-2026)
 19. [Changelog — historial de cambios](#changelog--historial-de-cambios)
 
+**Documentación adicional:** [`docs/README.md`](docs/README.md) · [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md)
+
 ---
 
 ## ¿Qué es RECI?
@@ -136,10 +138,16 @@ RECI/
 │   └── camera.py               # Captura en tiempo real — modo demo (ESPACIO) + producción
 │
 ├── docs/
-│   └── FLUJO_RECONOCIMIENTO.md # Diagrama completo, costos API y checklist de demo
+│   ├── README.md                 # Índice de documentación
+│   ├── FLUJO_RECONOCIMIENTO.md   # Pipeline visión, costos API, checklist demo
+│   ├── ENTRENAMIENTO_MODELO.md   # Captura de fotos + reentrenar en Colab
+│   └── diagramas/
+│       ├── arquitectura_reci.png # Diagrama arquitectura (informes)
+│       └── arquitectura_reci.mmd # Fuente Mermaid
 │
 ├── scripts/
-│   └── estimar_costo_gemini.py # Estimador de costo por imagen (Gemini)
+│   ├── estimar_costo_gemini.py       # Estimador de costo por imagen (Gemini)
+│   └── generar_diagrama_arquitectura.py  # Regenerar diagrama PNG
 │
 ├── api/
 │   ├── __init__.py
@@ -167,14 +175,15 @@ RECI/
 ├── images/
 │   ├── capturas/               # Fotos capturadas por la cámara en tiempo real
 │   ├── api_uploads/            # Fotos subidas por la API REST (gitignoreado — solo local)
-│   └── prueba1-8.jpeg          # Imágenes de prueba incluidas en el repo
+│   └── prueba1-16.jpeg         # Imágenes de prueba incluidas en el repo
 │
 ├── logs/                       # Logs de la API en producción — solo local, no en repo
 │   └── reci.log                # Registro de clasificaciones, errores y eventos
 ├── fotos_dataset/              # Fotos tomadas con tomar_fotos.py — solo local, no en repo
-├── RECI_entrenar_modelo.ipynb  # Notebook de Google Colab para entrenar el modelo
+├── RECI_entrenar_automatico.ipynb  # Colab: entrenamiento completo (Ejecutar todo) ★
+├── RECI_entrenar_modelo.ipynb      # Colab: entrenamiento manual celda por celda
 ├── main.py                     # Punto de entrada principal — demo completo en consola
-├── tomar_fotos.py              # Recolector de fotos con modo ráfaga automática
+├── tomar_fotos.py              # Recolector local de fotos → subir a Drive → Colab
 ├── requirements.txt            # Dependencias Python del proyecto
 ├── .env                        # Variables de entorno — NO subir a GitHub (gitignoreado)
 ├── .env.example                # Plantilla: VISION_API, Claude, Gemini
@@ -258,8 +267,8 @@ cp ~/Downloads/model.tflite model/model.tflite
 cp ~/Downloads/labels.txt   model/labels.txt
 ```
 
-**Opción B — Entrenar el modelo desde cero:**
-Ver sección [Reentrenar el modelo](#reentrenar-el-modelo).
+**Opción B — Entrenar el modelo desde cero:**  
+Abrir `RECI_entrenar_automatico.ipynb` en Colab (GPU → Ejecutar todo). Ver [Reentrenar el modelo](#reentrenar-el-modelo-con-más-fotos) y [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md).
 
 **Opción C — Sin modelo (solo API de visión):**
 Si no hay `model/model.tflite`, el sistema detecta su ausencia y usa Claude/Gemini automáticamente. No se necesita hacer nada adicional.
@@ -559,25 +568,41 @@ Fotos tomadas en el campus PUCE Manabí con objetos reales, variando fondos, án
 
 | Clase | Total aprox. |
 |---|---|
-| plastico | ~14,900 fotos |
-| vidrio | ~6,400 fotos |
+| plastico | ~13,580 fotos |
+| vidrio | ~7,767 fotos |
 | **Total** | **~21,347 fotos** |
+
+Ratio de desbalance: ~**1.75:1** (plástico / vidrio). Compensado con `class_weight` en entrenamiento.
 
 ### Proceso de entrenamiento (Google Colab)
 
-Archivo: `RECI_entrenar_modelo.ipynb`  
-Hardware: GPU Tesla T4 (gratuita en Colab)
+> **Guía paso a paso:** [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md)
 
-- **Fase 1** — capas nuevas, 13 épocas: 99.1% de precisión
-- **Fase 2** — fine-tuning últimas 30 capas, 8 épocas: 99.7% de precisión
-- **Tiempo total:** ~3 horas
+| Notebook | Uso |
+|---|---|
+| **`RECI_entrenar_automatico.ipynb`** | **Recomendado** — monta Drive, organiza fotos nuevas, entrena Fase 1+2, evalúa y exporta `.tflite` con **Ejecutar todo** |
+| `RECI_entrenar_modelo.ipynb` | Manual — mismo pipeline, celda por celda (depuración) |
+
+Hardware: GPU Tesla T4 (gratuita en Colab) · Tiempo: ~2–4 h
+
+Salida del entrenamiento automático (no sobrescribe el modelo anterior):
+
+```
+RECI_dataset_propio/runs/run_YYYYMMDD_HHMM/
+├── model.tflite
+├── labels.txt
+└── entrenamiento_manifest.json
+```
+
+- **Fase 1** — capas nuevas, hasta 15 épocas (EarlyStopping): ~92% val
+- **Fase 2** — fine-tuning últimas 30 capas, hasta 10 épocas: **98.2%** val (último run)
 
 **Mejoras implementadas en el notebook (Junio 2026):**
 
 | Mejora | Descripción |
 |---|---|
 | `RANDOM_SEED = 42` | Reproduce exactamente el mismo split en cada entrenamiento |
-| `class_weight` automático | Calcula y aplica pesos para compensar que hay 2.3× más fotos de plástico que de vidrio |
+| `class_weight` automático | Compensa desbalance ~1.75:1 plástico/vidrio |
 | Semillas en capas de augmentation | `RandomFlip`, `RandomRotation`, `RandomZoom`, `RandomBrightness` ahora tienen `seed` fijo |
 | Semillas en `image_dataset_from_directory` | El shuffle del dataset es reproducible entre ejecuciones |
 | Métricas detalladas por clase | Cell 19 imprime precision, recall, F1-score y soporte para cada clase, además de la matriz de confusión |
@@ -586,29 +611,32 @@ Hardware: GPU Tesla T4 (gratuita en Colab)
 
 ### Reentrenar el modelo con más fotos
 
+Ver guía completa: [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md)
+
 ```bash
-# Paso 1 — Tomar fotos del campus con modo ráfaga
-python3 tomar_fotos.py plastico   # R = ráfaga automática 1 foto/0.2s por 60s
+# Paso 1 — Tomar fotos del campus
+python3 tomar_fotos.py plastico   # ESPACIO = 1 foto | R = ráfaga 0.2 s/foto × 60 s
 python3 tomar_fotos.py vidrio
-# Variar: ángulos, distancias, fondos, iluminación natural y artificial
+# Variar: ángulos, distancias, fondos, iluminación. Priorizar vidrio (clase minoritaria).
 
 # Paso 2 — Subir fotos a Google Drive en:
 #   Mi unidad/RECI_dataset_propio/plastico/
 #   Mi unidad/RECI_dataset_propio/vidrio/
-# (Las fotos nuevas se mezclan con las existentes automáticamente)
 
-# Paso 3 — Entrenar en Google Colab
-#   colab.research.google.com → Abrir RECI_entrenar_modelo.ipynb
-#   Activar GPU: Entorno de ejecución → Cambiar tipo de entorno → GPU T4
-#   Ejecutar todos los pasos del notebook
+# Paso 3 — Entrenar en Google Colab (automático)
+#   Abrir RECI_entrenar_automatico.ipynb
+#   GPU T4 → Ejecución → Ejecutar todo (~2–4 h)
+#   Resultado en: RECI_dataset_propio/runs/run_YYYYMMDD_HHMM/
 
-# Paso 4 — Reemplazar el modelo
+# Paso 4 — Verificar manifest (accuracy, recall vidrio) y descargar model.tflite
+
+# Paso 5 — Reemplazar solo si los tests pasan
 cp ~/Downloads/model.tflite model/model.tflite
 cp ~/Downloads/labels.txt   model/labels.txt
 
-# Paso 5 — Verificar
+# Paso 6 — Verificar
+python3 tests/test_imagenes_completo.py
 python3 vision/tm_classifier.py images/prueba7.jpeg
-python3 tests/test_cases.py
 ```
 
 > Los nombres de clase en el notebook deben ser exactamente `plastico` y `vidrio` (minúsculas, sin tilde). El `tm_classifier.py` los reconoce automáticamente.
@@ -617,7 +645,8 @@ python3 tests/test_cases.py
 
 ## Flujo de visión híbrido
 
-> **Documento completo:** [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md) — diagrama, payload exacto a Claude/Gemini, costos y checklist de demo.
+> **Documento completo:** [`docs/FLUJO_RECONOCIMIENTO.md`](docs/FLUJO_RECONOCIMIENTO.md) — diagrama, payload exacto a Claude/Gemini, costos y checklist de demo.  
+> **Diagrama PNG:** [`docs/diagramas/arquitectura_reci.png`](docs/diagramas/arquitectura_reci.png)
 
 ```
 Cámara captura imagen (1280×720 px)
@@ -1239,7 +1268,7 @@ Demo estable en laptop con cámara:
   Fondo uniforme, luz LED frontal, objeto centrado (~40–60% del frame). Repetir B1 y comparar %.
 
 - [ ] **C2 — Dataset (solo fallos de B1)**  
-  `tomar_fotos.py` en modo ráfaga para casos que fallaron. Prioridad: vidrio difícil, vasos opacos, Gatorade vidrio. Subir a Drive; reentrenar en Colab si hay tiempo.
+  `tomar_fotos.py` → subir a Drive → `RECI_entrenar_automatico.ipynb` (Ejecutar todo). Prioridad: vidrio difícil, vasos opacos, Gatorade vidrio.
 
 - [ ] **C3 — Hardware (si el equipo lo tiene listo)**  
   Conectar `decision_hardware()` a servo/LED. Regla: sin confianza alta → servo 0°. No bloquea demo en laptop.
@@ -1278,6 +1307,20 @@ python3 tests/test_imagenes_completo.py
 ---
 
 ## Changelog — historial de cambios
+
+### Julio 2026 — v2.8 (documentación + entrenamiento automático)
+
+**Documentación**
+- `docs/README.md` — índice de documentación del proyecto
+- `docs/ENTRENAMIENTO_MODELO.md` — guía captura → Drive → Colab → despliegue
+- `docs/diagramas/arquitectura_reci.png` — diagrama de arquitectura para informes
+
+**Entrenamiento**
+- `RECI_entrenar_automatico.ipynb` — pipeline Colab completo con **Ejecutar todo**; salida en `runs/run_.../` sin pisar modelo anterior
+
+**Otros**
+- `tomar_fotos.py` — rutas Drive corregidas, mensajes de ráfaga alineados (0.2 s/foto)
+- README — conteos dataset actualizados (1.75:1), estructura de archivos ampliada
 
 ### Junio 2026 — v2.7 (refinamiento fallback + mensaje hardware + reglas lata/vidrio)
 
@@ -1446,9 +1489,9 @@ tenía 2 clases (`plastico`/`vidrio`) y mapeaba todo a atributos genéricos inco
 - `_limpiar_uploads()` limpia `images/api_uploads/` automáticamente conservando solo los 50 más recientes.
 - Logging persistente configurado al arranque: todas las clasificaciones y errores se guardan en `logs/reci.log` con nivel INFO.
 
-**`RECI_entrenar_modelo.ipynb`**
+**`RECI_entrenar_modelo.ipynb`** / **`RECI_entrenar_automatico.ipynb`**
 - `RANDOM_SEED = 42` aplicado globalmente → resultados reproducibles entre ejecuciones.
-- `class_weight` calculado y aplicado en Fase 1 y Fase 2 → compensa el desbalance 2.3:1 entre plástico y vidrio.
+- `class_weight` calculado y aplicado en Fase 1 y Fase 2 → compensa desbalance ~1.75:1 plástico/vidrio.
 - Métricas detalladas por clase (precision, recall, F1-score, support) y matriz de confusión en la celda de evaluación.
 - Carga explícita de `mejor_modelo_ft.keras` antes de convertir a TFLite con manejo de `FileNotFoundError`.
 - Path del dataset en Drive corregido: `RECI_dataset_propio/dataset_organizado`.
@@ -1464,4 +1507,4 @@ tenía 2 clases (`plastico`/`vidrio`) y mapeaba todo a atributos genéricos inco
 
 ---
 
-*Última actualización: Junio 2026 — v2.7 · Roadmap demo A1–C3 · 174 reglas · Claude Haiku · 110/110 + 16/16 + 5/5 tests*
+*Última actualización: Julio 2026 — v2.8 · RECI_entrenar_automatico.ipynb · docs/ · Roadmap A1–C3 · 110/110 + 16/16 + 5/5 tests*
