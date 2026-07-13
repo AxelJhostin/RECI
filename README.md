@@ -1214,7 +1214,7 @@ Demo estable en laptop con cámara:
 
 ### Bloque A — Código (prioridad; orden estricto)
 
-- [ ] **A1 — Blindar configuración de visión**  
+- [x] **A1 — Blindar configuración de visión**  
   Verificar `.env` (`VISION_API=claude`, `CLAUDE_MODEL=claude-haiku-4-5`). Al iniciar cámara/API, mostrar proveedor y modelo activos. Si API falla, mensaje visible (no fallback silencioso).  
   *Archivos:* `vision/attribute_extractor.py`, `vision/camera.py`, `api/app.py`  
   *Listo cuando:* cámara clasifica con Claude visible en consola.
@@ -1239,7 +1239,7 @@ Demo estable en laptop con cámara:
   *Archivos:* `vision/camera.py`  
   *Listo cuando:* mismo objeto con mano temblorosa da resultado estable.
 
-- [ ] **A6 — Logging completo por clasificación**  
+- [x] **A6 — Logging completo por clasificación**  
   Guardar en `logs/clasificaciones.jsonl`: imagen, TM, atributos antes/después de `refinar_atributos_api`, conclusión, CF, reglas disparadas, backward, proveedor.  
   *Archivos:* `vision/camera.py`, `vision/attribute_extractor.py`, `api/app.py`  
   *Listo cuando:* un fallo se explica leyendo una línea del log.

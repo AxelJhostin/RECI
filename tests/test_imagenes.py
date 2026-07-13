@@ -13,7 +13,7 @@ from pathlib import Path
 def probar_imagenes(carpeta="images"):
     """Prueba todas las imágenes de una carpeta."""
 
-    extractor = AttributeExtractor()
+    extractor = AttributeExtractor(mostrar_banner=False)
     carpeta_path = Path(carpeta)
 
     # Buscar todas las imágenes

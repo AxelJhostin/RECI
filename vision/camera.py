@@ -394,6 +394,12 @@ class Camera:
             print(f"  RESULTADO : {conclusion}")
             print(f"  DESTINO   : {hardware['compuerta'] if hardware['compuerta'] != 'ninguna' else 'tacho general'}")
             print(f"  MENSAJE   : {hardware['mensaje']}")
+            if resultado.get("vision_fallback"):
+                print(f"  ⚠ FALLBACK: {resultado.get('vision_fallback_motivo', 'API no disponible')}")
+            else:
+                prov = resultado.get("vision_proveedor", "?")
+                modelo = resultado.get("vision_modelo", "?")
+                print(f"  VISIÓN    : {resultado.get('vision_modo', 'hibrido')} ({prov} · {modelo})")
             print(f"  {'═'*50}\n")
             return resultado
 

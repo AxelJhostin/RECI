@@ -8,6 +8,8 @@ import sys
 import json
 import logging
 import shutil
+import contextlib
+import io
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -109,16 +111,20 @@ def _limpiar_uploads() -> None:
 from dotenv import load_dotenv
 load_dotenv()
 
-def _vision_provider() -> str:
-    """claude | gemini según VISION_API o keys disponibles."""
-    explicit = os.environ.get("VISION_API", "").lower().strip()
-    if explicit in ("claude", "gemini"):
-        return explicit
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return "claude"
-    return "gemini"
+from vision.vision_config import (
+    imprimir_banner_vision,
+    resolver_config_vision,
+    resumen_para_health,
+)
 
-VISION_PROVIDER = _vision_provider()
+try:
+    VISION_CONFIG = resolver_config_vision()
+    imprimir_banner_vision(VISION_CONFIG)
+    VISION_PROVIDER = VISION_CONFIG["vision_api"]
+except ValueError as _cfg_err:
+    VISION_CONFIG = None
+    VISION_PROVIDER = os.environ.get("VISION_API", "gemini").lower().strip() or "gemini"
+    print(f"[RECI API] ⚠ Configuración visión incompleta: {_cfg_err}")
 
 def _modelo_tm_disponible() -> bool:
     return Path("model/model.tflite").exists() and Path("model/labels.txt").exists()
@@ -139,7 +145,10 @@ else:
     MODO_VISION = VISION_PROVIDER
     logger.info("API iniciada | modo=%s", VISION_PROVIDER.upper())
 
-print(f"[RECI API] Modo de visión: {MODO_VISION.upper()}")
+if VISION_CONFIG:
+    print(f"[RECI API] Proveedor activo: {VISION_CONFIG['proveedor_label']} · {VISION_CONFIG['modelo_primario']}")
+else:
+    print(f"[RECI API] Modo de visión: {MODO_VISION.upper()} (sin validación completa)")
 
 
 # ─────────────────────────────────────────────
@@ -190,14 +199,25 @@ def raiz():
 def health():
     """Verifica que el sistema experto esté funcionando."""
     try:
-        return {
+        payload = {
             "status":          "ok",
             "sistema_experto": "activo",
             "total_reglas":    len(engine_global.kb.obtener_reglas()),
             "modo_vision":     MODO_VISION,
             "modelo_tm":       _modelo_tm_disponible(),
-            "timestamp":       datetime.now().isoformat()
+            "timestamp":       datetime.now().isoformat(),
         }
+        if VISION_CONFIG:
+            payload["vision"] = resumen_para_health(VISION_CONFIG)
+        else:
+            payload["vision"] = {
+                "proveedor": VISION_PROVIDER,
+                "modelo": None,
+                "modo_flujo": MODO_VISION,
+                "tm_disponible": _modelo_tm_disponible(),
+                "advertencias": ["Configuración de visión no validada — revisa .env"],
+            }
+        return payload
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -299,59 +319,41 @@ async def clasificar_imagen(file: UploadFile = File(...)):
         with open(ruta_temp, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        extractor = AttributeExtractor()
+        extractor = AttributeExtractor(mostrar_banner=False)
 
-        # ── Flujo híbrido: TM da contexto → API analiza → SE decide ──
-        vision_usada = MODO_VISION
-        if tm_global is not None:
-            try:
-                import cv2
-                img = cv2.imread(str(ruta_temp))
-                if img is not None:
-                    _, clase_tm, prob_tm, prob_vidrio = tm_global.analizar_frame(img)
-                else:
-                    clase_tm = prob_tm = prob_vidrio = None
-            except Exception as _te:
-                logger.warning("TM falló en API (%s) — %s sin contexto",
-                               _te, VISION_PROVIDER)
-                clase_tm = prob_tm = prob_vidrio = None
+        with contextlib.redirect_stdout(io.StringIO()):
+            resultado = extractor.analizar_y_clasificar_hibrido(
+                str(ruta_temp), clf=tm_global
+            )
 
-            try:
-                atributos    = extractor.analizar_imagen_hibrido(
-                    str(ruta_temp), clase_tm, prob_tm, prob_vidrio)
-                vision_usada = f"hibrido_tm_{VISION_PROVIDER}"
-            except Exception as _ge:
-                logger.warning("%s falló (%s) — fallback TM+heurísticas",
-                               VISION_PROVIDER, _ge)
-                atributos    = tm_global.analizar_imagen(str(ruta_temp))
-                vision_usada = "tm_heuristicas"
-        else:
-            atributos    = extractor.analizar_imagen(str(ruta_temp))
-            vision_usada = VISION_PROVIDER
-        # ──────────────────────────────────────────────────────────────
+        atributos = resultado["atributos"]
+        conclusion = resultado["conclusion"]
+        confianza = resultado["confianza"]
+        reporte = resultado["reporte"]
+        hardware = resultado["hardware"]
+        vision_usada = resultado.get("vision_modo", MODO_VISION)
+        vision_fallback = resultado.get("vision_fallback", False)
+        vision_fallback_motivo = resultado.get("vision_fallback_motivo")
+        razonamiento = reporte.get("razonamiento", {})
+        reglas_count = razonamiento.get("total_reglas_disparadas", 0)
 
-        engine_global.cargar_hechos(atributos)
-        conclusion, confianza, reglas = engine_global.ejecutar()
-        reporte  = ExplanationReport(engine_global)
-        hardware = engine_global.decision_hardware()
+        if vision_fallback:
+            logger.warning(
+                "clasificar_imagen FALLBACK | motivo=%s | archivo=%s",
+                vision_fallback_motivo, file.filename,
+            )
 
         stats.registrar(
             conclusion        = conclusion,
             confianza         = confianza,
             objeto_reconocido = atributos.get("objeto_reconocido"),
-            reglas_disparadas = len(reglas)
+            reglas_disparadas = reglas_count
         )
 
-        logger.info("clasificar_imagen | %s %.1f%% | vision=%s | archivo=%s",
-                    conclusion, confianza * 100, vision_usada, file.filename)
-
-        backward = None
-        if engine_global.resultado_backward:
-            backward = {
-                "conclusion":  engine_global.resultado_backward,
-                "score":       engine_global.score_backward,
-                "consistente": engine_global.resultado_backward == conclusion
-            }
+        logger.info(
+            "clasificar_imagen | %s %.1f%% | vision=%s | fallback=%s | archivo=%s",
+            conclusion, confianza * 100, vision_usada, vision_fallback, file.filename,
+        )
 
         return {
             "success":               True,
@@ -362,14 +364,17 @@ async def clasificar_imagen(file: UploadFile = File(...)):
             "es_reciclable":         conclusion in ["VIDRIO", "PLASTICO"],
             "hardware":              hardware,
             "atributos":             atributos,
-            "reglas_disparadas":     len(reglas),
-            "backward_chaining":     backward,
-            "meta_reglas_aplicadas": engine_global.contexto_meta.get(
-                "meta_reglas_aplicadas", []),
-            "advertencias":          [str(a) for a in engine_global.advertencias_validacion],
-            "payload_supabase":      reporte.payload_supabase(),
+            "reglas_disparadas":     reglas_count,
+            "backward_chaining":     razonamiento.get("backward_chaining"),
+            "meta_reglas_aplicadas": razonamiento.get("meta_reglas_aplicadas", []),
+            "advertencias":          razonamiento.get("advertencias", []),
+            "payload_supabase":      reporte.get("payload_supabase"),
             "imagen_procesada":      file.filename,
-            "vision_usada":          vision_usada
+            "vision_usada":          vision_usada,
+            "vision_proveedor":      resultado.get("vision_proveedor"),
+            "vision_modelo":         resultado.get("vision_modelo"),
+            "vision_fallback":       vision_fallback,
+            "vision_fallback_motivo": vision_fallback_motivo,
         }
 
     except Exception as e:

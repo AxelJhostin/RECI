@@ -17,6 +17,9 @@ import time
 import httpx
 from pathlib import Path
 
+from vision.clasificacion_log import registrar_clasificacion
+from vision.vision_config import imprimir_banner_vision, resolver_config_vision
+
 logger = logging.getLogger("reci")
 
 
@@ -149,52 +152,25 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
     # Mantener PROMPT como alias para compatibilidad con código existente
     PROMPT = PROMPT_BASE
 
-    def __init__(self):
-        from dotenv import load_dotenv
-        load_dotenv()
+    def __init__(self, mostrar_banner: bool = True):
+        config = resolver_config_vision()
+        self._config_vision = config
+        self.vision_api = config["vision_api"]
+        self.api_key = (
+            os.environ.get("ANTHROPIC_API_KEY", "")
+            if self.vision_api == "claude"
+            else os.environ.get("GEMINI_API_KEY", "")
+        )
+        self.modelos = config["modelos"]
+        self.modelo_primario = config["modelo_primario"]
 
-        self.vision_api = os.environ.get("VISION_API", "").lower().strip()
-        if not self.vision_api:
-            if os.environ.get("ANTHROPIC_API_KEY"):
-                self.vision_api = "claude"
-            elif os.environ.get("GEMINI_API_KEY"):
-                self.vision_api = "gemini"
-            else:
-                raise ValueError(
-                    "Configura ANTHROPIC_API_KEY o GEMINI_API_KEY en .env "
-                    "(opcional: VISION_API=claude|gemini)"
-                )
-
-        if self.vision_api == "claude":
-            self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-            if not self.api_key:
-                raise ValueError(
-                    "VISION_API=claude pero ANTHROPIC_API_KEY no está en .env"
-                )
-            modelo = os.environ.get("CLAUDE_MODEL", "").strip()
-            if modelo.endswith("-5s"):
-                modelo = modelo[:-1]
-            self.modelos = []
-            if modelo:
-                self.modelos.append(modelo)
-            for m in self.CLAUDE_MODELS:
-                if m not in self.modelos:
-                    self.modelos.append(m)
-        elif self.vision_api == "gemini":
-            self.api_key = os.environ.get("GEMINI_API_KEY", "")
-            if not self.api_key:
-                raise ValueError(
-                    "VISION_API=gemini pero GEMINI_API_KEY no está en .env"
-                )
-            self.modelos = list(self.GEMINI_MODELS)
-        else:
-            raise ValueError(
-                f"VISION_API inválido: '{self.vision_api}'. Usa 'claude' o 'gemini'."
-            )
+        if mostrar_banner:
+            imprimir_banner_vision(config)
 
         # Si la API falla por auth, no reintentar en las siguientes
         self._vision_activo = True
         self._vision_error  = None
+        self._ultima_vision: dict = {}
 
     def reiniciar_sesion(self) -> None:
         """Reactiva la API tras un fallo de auth (401/403). Rate limits no la desactivan."""
@@ -540,9 +516,17 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         texto = self._extraer_texto_respuesta(data)
 
         atributos = self._parsear_json(texto)
+        atributos_api = dict(atributos)
         atributos = self._refinar_con_imagen(
             ruta_imagen, atributos, clase_tm, prob_tm, prob_vidrio
         )
+        self._ultima_vision = {
+            "atributos_api": atributos_api,
+            "atributos_finales": atributos,
+            "vision_modo": f"hibrido_{self.vision_api}",
+            "fallback": False,
+            "fallback_motivo": None,
+        }
         logger.info("analizar_hibrido OK | tm=%s(%.0f%%) → %s=%s",
                     clase_tm, (prob_tm or 0) * 100, self.vision_api,
                     atributos.get("objeto_reconocido"))
@@ -584,22 +568,46 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 print(f"  ⚠ TM falló ({e}), {self._provider_label} continúa sin contexto")
 
         # ── Paso 2: API de visión (fallback a TM si falla) ───────────────
+        vision_modo = f"hibrido_{self.vision_api}"
+        fallback = False
+        fallback_motivo = None
+        atributos_api = None
+
         try:
             atributos = self.analizar_imagen_hibrido(
                 ruta_imagen, clase_tm, prob_tm, prob_vidrio
             )
+            atributos_api = self._ultima_vision.get("atributos_api")
         except Exception as e:
-            motivo = self._mensaje_error_api(e, self.vision_api)
-            print(f"  ⚠ {self._provider_label} no disponible ({motivo}) — usando TM + heurísticas visuales")
+            fallback = True
+            fallback_motivo = self._mensaje_error_api(e, self.vision_api)
+            vision_modo = "fallback_tm_heuristicas"
+            print(
+                f"\n  ⚠ FALLBACK ACTIVO — {self._provider_label} no disponible"
+            )
+            print(f"     Motivo: {fallback_motivo}")
+            print("     Usando: MobileNetV2 + heurísticas OpenCV\n")
+            logger.warning(
+                "vision fallback | provider=%s motivo=%s imagen=%s",
+                self.vision_api, fallback_motivo, ruta_imagen,
+            )
             if clf is None:
                 try:
                     from vision.tm_classifier import TeachableMachineClassifier
                     clf = TeachableMachineClassifier()
                 except Exception as e2:
                     raise RuntimeError(
-                        f"{self._provider_label} falló y TM no está disponible — sin clasificación posible"
+                        f"{self._provider_label} falló y TM no está disponible — "
+                        "sin clasificación posible"
                     ) from e
             atributos = clf.analizar_imagen(ruta_imagen)
+            self._ultima_vision = {
+                "atributos_api": None,
+                "atributos_finales": atributos,
+                "vision_modo": vision_modo,
+                "fallback": True,
+                "fallback_motivo": fallback_motivo,
+            }
 
         # ── Paso 3: Sistema experto decide ────────────────────────────
         engine = InferenceEngine()
@@ -616,7 +624,15 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         print(f"    Servo     : {decision['angulo_servo']}°")
         print(f"    Mensaje   : {decision['mensaje']}")
 
-        return {
+        backward_info = None
+        if engine.resultado_backward:
+            backward_info = {
+                "conclusion": engine.resultado_backward,
+                "score": engine.score_backward,
+                "consistente": engine.resultado_backward == conclusion,
+            }
+
+        resultado = {
             "atributos":  atributos,
             "conclusion": conclusion,
             "confianza":  confianza,
@@ -624,7 +640,33 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
             "reporte":    reporte.a_dict(),
             "tm_clase":   clase_tm,
             "tm_prob":    prob_tm,
+            "vision_modo": vision_modo,
+            "vision_proveedor": self.vision_api,
+            "vision_modelo": self.modelo_primario,
+            "vision_fallback": fallback,
+            "vision_fallback_motivo": fallback_motivo,
         }
+
+        registrar_clasificacion(
+            origen="attribute_extractor.hibrido",
+            imagen=ruta_imagen,
+            tm_clase=clase_tm,
+            tm_prob=prob_tm,
+            proveedor=self.vision_api,
+            modelo=self.modelo_primario,
+            vision_modo=vision_modo,
+            fallback=fallback,
+            fallback_motivo=fallback_motivo,
+            atributos_api=atributos_api or self._ultima_vision.get("atributos_api"),
+            atributos_finales=atributos,
+            conclusion=conclusion,
+            confianza=confianza,
+            reglas_disparadas=len(reglas),
+            backward=backward_info,
+            hardware=decision,
+        )
+
+        return resultado
 
     def analizar_y_clasificar(self, ruta_imagen: str) -> dict:
         """
@@ -701,8 +743,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
 
     def __repr__(self):
         return (
-            f"AttributeExtractor({self._provider_label} API, "
-            f"key={'configurada' if self.api_key else 'NO configurada'})"
+            f"AttributeExtractor({self._provider_label} · {self.modelo_primario}, "
+            f"key={'ok' if self.api_key else 'NO'})"
         )
 
 

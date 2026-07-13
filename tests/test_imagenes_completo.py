@@ -81,7 +81,7 @@ def ejecutar_pruebas(pausa_seg: float = 2.0):
             clf = TeachableMachineClassifier()
 
     try:
-        extractor = AttributeExtractor()
+        extractor = AttributeExtractor(mostrar_banner=False)
         api_ok = True
     except Exception:
         extractor = None
