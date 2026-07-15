@@ -140,12 +140,13 @@ RECI/
 ├── docs/
 │   ├── README.md                 # Índice de documentación
 │   ├── FLUJO_RECONOCIMIENTO.md   # Pipeline visión, costos API, checklist demo
-│   ├── ENTRENAMIENTO_MODELO.md   # Captura de fotos + reentrenar en Colab
+│   ├── ENTRENAMIENTO_MODELO.md   # Captura de fotos + entrenar en local (scripts/entrenar_modelo.py)
 │   └── diagramas/
 │       ├── arquitectura_reci.png # Diagrama arquitectura (informes)
 │       └── arquitectura_reci.mmd # Fuente Mermaid
 │
 ├── scripts/
+│   ├── entrenar_modelo.py            # ★ Entrenamiento local MobileNetV2 (reemplaza Colab)
 │   ├── estimar_costo_gemini.py       # Estimador de costo por imagen (Gemini)
 │   └── generar_diagrama_arquitectura.py  # Regenerar diagrama PNG
 │
@@ -180,10 +181,10 @@ RECI/
 ├── logs/                       # Logs de la API en producción — solo local, no en repo
 │   └── reci.log                # Registro de clasificaciones, errores y eventos
 ├── fotos_dataset/              # Fotos tomadas con tomar_fotos.py — solo local, no en repo
-├── RECI_entrenar_automatico.ipynb  # Colab: entrenamiento completo (Ejecutar todo) ★
-├── RECI_entrenar_modelo.ipynb      # Colab: entrenamiento manual celda por celda
+├── RECI_entrenar_automatico.ipynb  # Legacy Colab (puede desconectarse — preferir script local)
+├── RECI_entrenar_modelo.ipynb      # Legacy Colab manual celda por celda
 ├── main.py                     # Punto de entrada principal — demo completo en consola
-├── tomar_fotos.py              # Recolector local de fotos → subir a Drive → Colab
+├── tomar_fotos.py              # Recolector local de fotos → entrenar_modelo.py
 ├── requirements.txt            # Dependencias Python del proyecto
 ├── .env                        # Variables de entorno — NO subir a GitHub (gitignoreado)
 ├── .env.example                # Plantilla: VISION_API, Claude, Gemini
@@ -198,7 +199,8 @@ RECI/
 
 - Python 3.9 o superior
 - Cámara (integrada en laptop, módulo USB, o módulo Raspberry Pi Camera)
-- Cuenta Anthropic o Google (para Claude/Gemini API) y Google Colab (para reentrenar el modelo)
+- TensorFlow ≥ 2.20 (entrenamiento local) · opcional `tensorflow-metal` en Mac Apple Silicon
+- Cuenta Anthropic o Google (para Claude/Gemini API)
 
 ### 1. Clonar e instalar dependencias
 
@@ -267,8 +269,14 @@ cp ~/Downloads/model.tflite model/model.tflite
 cp ~/Downloads/labels.txt   model/labels.txt
 ```
 
-**Opción B — Entrenar el modelo desde cero:**  
-Abrir `RECI_entrenar_automatico.ipynb` en Colab (GPU → Ejecutar todo). Ver [Reentrenar el modelo](#reentrenar-el-modelo-con-más-fotos) y [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md).
+**Opción B — Entrenar el modelo desde cero (local, recomendado):**  
+Copiar `RECI_dataset_propio` desde Drive a `~/RECI_dataset_propio`, luego:
+
+```bash
+python3 scripts/entrenar_modelo.py
+```
+
+Ver [Reentrenar el modelo](#reentrenar-el-modelo-con-más-fotos) y [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md).
 
 **Opción C — Sin modelo (solo API de visión):**
 Si no hay `model/model.tflite`, el sistema detecta su ausencia y usa Claude/Gemini automáticamente. No se necesita hacer nada adicional.
@@ -574,16 +582,25 @@ Fotos tomadas en el campus PUCE Manabí con objetos reales, variando fondos, án
 
 Ratio de desbalance: ~**1.75:1** (plástico / vidrio). Compensado con `class_weight` en entrenamiento.
 
-### Proceso de entrenamiento (Google Colab)
+### Proceso de entrenamiento (local — recomendado)
 
 > **Guía paso a paso:** [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md)
 
-| Notebook | Uso |
+| Herramienta | Uso |
 |---|---|
-| **`RECI_entrenar_automatico.ipynb`** | **Recomendado** — monta Drive, organiza fotos nuevas, entrena Fase 1+2, evalúa y exporta `.tflite` con **Ejecutar todo** |
-| `RECI_entrenar_modelo.ipynb` | Manual — mismo pipeline, celda por celda (depuración) |
+| **`scripts/entrenar_modelo.py`** | **Recomendado** — organiza fotos, Fase 1+2, exporta `.tflite`, **reanudable** si se interrumpe |
+| `RECI_entrenar_automatico.ipynb` | Legacy Colab — puede desconectarse a mitad de entrenamiento |
+| `RECI_entrenar_modelo.ipynb` | Legacy Colab manual |
 
-Hardware: GPU Tesla T4 (gratuita en Colab) · Tiempo: ~2–4 h
+```bash
+# Entrenamiento completo (dataset en ~/RECI_dataset_propio)
+python3 scripts/entrenar_modelo.py --sync-fotos-repo
+
+# Mac Apple Silicon: aceleración GPU
+pip install tensorflow-metal
+```
+
+Hardware: GPU NVIDIA / Mac Metal / CPU (más lento) · Tiempo: ~2–8 h según equipo
 
 Salida del entrenamiento automático (no sobrescribe el modelo anterior):
 
@@ -619,20 +636,23 @@ python3 tomar_fotos.py plastico   # ESPACIO = 1 foto | R = ráfaga 0.2 s/foto ×
 python3 tomar_fotos.py vidrio
 # Variar: ángulos, distancias, fondos, iluminación. Priorizar vidrio (clase minoritaria).
 
-# Paso 2 — Subir fotos a Google Drive en:
-#   Mi unidad/RECI_dataset_propio/plastico/
-#   Mi unidad/RECI_dataset_propio/vidrio/
+# Paso 2 — Dataset en local (copiar RECI_dataset_propio desde Drive si hace falta)
+#   ~/RECI_dataset_propio/plastico/
+#   ~/RECI_dataset_propio/vidrio/
 
-# Paso 3 — Entrenar en Google Colab (automático)
-#   Abrir RECI_entrenar_automatico.ipynb
-#   GPU T4 → Ejecución → Ejecutar todo (~2–4 h)
-#   Resultado en: RECI_dataset_propio/runs/run_YYYYMMDD_HHMM/
+# Paso 3 — Entrenar en tu computadora (recomendado)
+python3 scripts/entrenar_modelo.py --sync-fotos-repo
+# Mac M1–M4: pip install tensorflow-metal
+# Resultado en: ~/RECI_dataset_propio/runs/run_YYYYMMDD_HHMM/
 
-# Paso 4 — Verificar manifest (accuracy, recall vidrio) y descargar model.tflite
+# Si Colab se desconectó en Fase 1, continuar Fase 2 con mejor_modelo.keras:
+# python3 scripts/entrenar_modelo.py --solo-fase 2 --checkpoint ~/RECI_dataset_propio/runs/run_XXXX/mejor_modelo.keras
+
+# Paso 4 — Verificar manifest (accuracy, recall vidrio)
 
 # Paso 5 — Reemplazar solo si los tests pasan
-cp ~/Downloads/model.tflite model/model.tflite
-cp ~/Downloads/labels.txt   model/labels.txt
+cp ~/RECI_dataset_propio/runs/run_XXXX/model.tflite model/model.tflite
+cp ~/RECI_dataset_propio/runs/run_XXXX/labels.txt   model/labels.txt
 
 # Paso 6 — Verificar
 python3 tests/test_imagenes_completo.py

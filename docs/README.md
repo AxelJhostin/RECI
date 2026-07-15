@@ -5,7 +5,7 @@
 | Documento | Contenido |
 |-----------|-----------|
 | [FLUJO_RECONOCIMIENTO.md](FLUJO_RECONOCIMIENTO.md) | Pipeline visión híbrido (TM + API + OpenCV + SE), costos API, checklist demo |
-| [ENTRENAMIENTO_MODELO.md](ENTRENAMIENTO_MODELO.md) | Cómo capturar fotos, subir a Drive y reentrenar MobileNetV2 en Colab |
+| [ENTRENAMIENTO_MODELO.md](ENTRENAMIENTO_MODELO.md) | Captura de fotos + entrenar MobileNetV2 **en local** (`scripts/entrenar_modelo.py`) |
 | [diagramas/arquitectura_reci.png](diagramas/arquitectura_reci.png) | Diagrama de arquitectura del sistema (PNG para informes) |
 | [diagramas/arquitectura_reci.mmd](diagramas/arquitectura_reci.mmd) | Fuente Mermaid del diagrama |
 
@@ -13,12 +13,13 @@
 
 | Script | Uso |
 |--------|-----|
+| **`entrenar_modelo.py`** | **Recomendado** — entrenar / reanudar MobileNetV2 en tu PC |
 | `estimar_costo_gemini.py` | Estimar costo por imagen con Gemini |
 | `generar_diagrama_arquitectura.py` | Regenerar `diagramas/arquitectura_reci.png` |
 
-## Notebooks de entrenamiento (raíz del repo)
+## Notebooks de entrenamiento (legacy Colab)
 
 | Notebook | Cuándo usarlo |
 |----------|----------------|
-| **`RECI_entrenar_automatico.ipynb`** | **Recomendado** — Ejecutar todo de una vez (GPU + Run all) |
-| `RECI_entrenar_modelo.ipynb` | Manual — revisar celda por celda o depurar |
+| `RECI_entrenar_automatico.ipynb` | Legacy — puede desconectarse; preferir `entrenar_modelo.py` |
+| `RECI_entrenar_modelo.ipynb` | Legacy manual celda por celda |

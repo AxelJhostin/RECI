@@ -1,5 +1,5 @@
 # tomar_fotos.py — Recolector local de fotos para el dataset RECI
-# Ver docs/ENTRENAMIENTO_MODELO.md para el flujo completo (Drive + Colab)
+# Ver docs/ENTRENAMIENTO_MODELO.md para el flujo completo (local)
 import cv2
 import os
 import sys
@@ -99,5 +99,7 @@ cv2.destroyAllWindows()
 print(f"\nListo — {contador} fotos en {CARPETA}/")
 print("Sube las fotos a Google Drive en:")
 print(f"  Mi unidad/RECI_dataset_propio/{CLASE}/")
-print("Luego abre RECI_entrenar_automatico.ipynb en Colab → Ejecutar todo.")
+print("Luego entrena en local:")
+print("  python3 scripts/entrenar_modelo.py --sync-fotos-repo")
+print("Ver docs/ENTRENAMIENTO_MODELO.md")
 print("Guía: docs/ENTRENAMIENTO_MODELO.md")
