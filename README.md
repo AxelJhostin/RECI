@@ -29,7 +29,7 @@
 18. [Roadmap — demo funcional (semana PAO 2026)](#roadmap--demo-funcional-semana-pao-2026)
 19. [Changelog — historial de cambios](#changelog--historial-de-cambios)
 
-**Documentación adicional:** [`docs/README.md`](docs/README.md) · [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md)
+**Documentación adicional:** [`docs/README.md`](docs/README.md) · [`docs/ENTRENAMIENTO_MODELO.md`](docs/ENTRENAMIENTO_MODELO.md) · [`docs/AGENTE_ENTRENAMIENTO_LOCAL.md`](docs/AGENTE_ENTRENAMIENTO_LOCAL.md) (handoff agente Windows)
 
 ---
 
@@ -140,7 +140,8 @@ RECI/
 ├── docs/
 │   ├── README.md                 # Índice de documentación
 │   ├── FLUJO_RECONOCIMIENTO.md   # Pipeline visión, costos API, checklist demo
-│   ├── ENTRENAMIENTO_MODELO.md   # Captura de fotos + entrenar en local (scripts/entrenar_modelo.py)
+│   ├── ENTRENAMIENTO_MODELO.md        # Guía humana: captura + entrenar local
+│   ├── AGENTE_ENTRENAMIENTO_LOCAL.md  # Handoff agente: entrenamiento largo Windows
 │   └── diagramas/
 │       ├── arquitectura_reci.png # Diagrama arquitectura (informes)
 │       └── arquitectura_reci.mmd # Fuente Mermaid

@@ -6,6 +6,7 @@
 |-----------|-----------|
 | [FLUJO_RECONOCIMIENTO.md](FLUJO_RECONOCIMIENTO.md) | Pipeline visión híbrido (TM + API + OpenCV + SE), costos API, checklist demo |
 | [ENTRENAMIENTO_MODELO.md](ENTRENAMIENTO_MODELO.md) | Captura de fotos + entrenar MobileNetV2 **en local** (`scripts/entrenar_modelo.py`) |
+| [AGENTE_ENTRENAMIENTO_LOCAL.md](AGENTE_ENTRENAMIENTO_LOCAL.md) | **Handoff para agente** — entrenamiento largo en Windows, dataset local, checklist |
 | [diagramas/arquitectura_reci.png](diagramas/arquitectura_reci.png) | Diagrama de arquitectura del sistema (PNG para informes) |
 | [diagramas/arquitectura_reci.mmd](diagramas/arquitectura_reci.mmd) | Fuente Mermaid del diagrama |
 
