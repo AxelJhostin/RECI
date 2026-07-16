@@ -1,0 +1,186 @@
+================================================================================
+  RECI — RESUMEN DEL PROYECTO (estado a julio 2026)
+  Robot Inteligente de Reciclaje · PUCE Sede Manabí · IS502 / Proyecto integrador
+  Repositorio: https://github.com/AxelJhostin/RECI
+================================================================================
+
+1. QUÉ ES RECI
+--------------------------------------------------------------------------------
+RECI es un robot / estación inteligente de reciclaje para el campus de la PUCE
+Sede Manabí. Identifica residuos con visión artificial y un sistema experto,
+y abre la compuerta correcta:
+
+  · PLÁSTICO  → compuerta derecha  (LED verde)
+  · VIDRIO    → compuerta izquierda (LED azul)
+  · RESTO     → rechazo             (LED rojo)
+                Mensaje: "Material no permitido — depositar en tacho general"
+                (lata, metal, papel, cartón, orgánico, desconocido)
+
+Alcance del demo actual: solo se aceptan plástico y vidrio.
+
+
+2. ARQUITECTURA TÉCNICA (visión híbrida)
+--------------------------------------------------------------------------------
+Flujo por cada objeto:
+
+  Cámara 1280×720
+       ↓
+  MobileNetV2 (.tflite) — ~0.1 s
+  Clasifica plastico / vidrio (contexto para la API)
+       ↓
+  Claude Haiku o Gemini — ~2 s
+  Analiza la imagen y extrae 9 atributos visuales (JSON)
+       ↓
+  Refinamiento OpenCV (refinar_atributos_api)
+  Corrige latas, metal, PET vs vidrio mal etiquetados
+       ↓
+  Sistema experto RECI — ~0.01 s
+  174 reglas · 16 meta-reglas · forward + backward chaining · CF MYCIN
+       ↓
+  Decisión: PLASTICO | VIDRIO | LATA | ORGANICO | DESCONOCIDO
+       ↓
+  Hardware (servo, LED, mensaje) — integración física pendiente
+
+Si Claude/Gemini falla (404, 429, timeout):
+  Fallback → TM + refinar_atributos + refinar_atributos_api (sin interrumpir demo)
+
+
+3. SISTEMA EXPERTO (núcleo IS502)
+--------------------------------------------------------------------------------
+Implementado en Python puro (sin librerías de SE externas):
+
+  · 174 reglas IF-THEN en 5 niveles
+  · 16 meta-reglas (sesgos, exclusiones, modo cauteloso)
+  · Forward chaining + backward chaining con goals ponderados
+  · Factor de certeza estilo MYCIN
+  · Validador de 9 atributos obligatorios
+  · Reporte explicable (reglas disparadas, CF, advertencias)
+  · Productos ecuatorianos del campus: Fioravanti, Cola Gallito, Gatorade,
+    Pony Malta, Tetra Pak, Güitig, Powerade, Colgate Plax, etc.
+
+Pruebas formales del SE: 110/110 (100%)
+  · VIDRIO, PLÁSTICO, ambiguos, extremos, campus, LATA, orgánico
+
+
+4. MODELO DE MACHINE LEARNING
+--------------------------------------------------------------------------------
+  · Arquitectura: MobileNetV2 + transfer learning (ImageNet → RECI)
+  · Formato runtime: TensorFlow Lite (.tflite) ~8.5 MB
+  · Clases: plastico, vidrio (binario)
+  · Entrada: 224×224 RGB
+  · Dataset propio: ~21 347 fotos del campus PUCE Manabí
+    - plastico: ~13 580 · vidrio: ~7 767 (desbalance ~1.75:1, class_weight)
+  · Precisión validación (run Colab referencia): 98.2%
+  · Captura de fotos: tomar_fotos.py (individual o ráfaga 60 s)
+
+Entrenamiento:
+  · Inicial: Google Colab (RECI_entrenar_automatico.ipynb)
+  · Julio 2026: script local scripts/entrenar_modelo.py (Windows/Mac, reanudable)
+  · Modelo reentrenado en PC Windows; desplegado en model/model.tflite
+
+
+5. VISIÓN E INTEGRACIÓN IA
+--------------------------------------------------------------------------------
+  · Claude Haiku por defecto (VISION_API=claude, ~$0.001–0.002/foto)
+  · Gemini 2.5 Flash como alternativa
+  · vision/attribute_extractor.py — híbrido TM + API
+  · vision/visual_heuristics.py — refinar_atributos + refinar_atributos_api
+  · vision/camera.py — demo 4 estados, threading, corrección P/V
+  · API REST FastAPI — mismo flujo híbrido que la cámara
+
+
+6. PRUEBAS Y RESULTADOS RECIENTES
+--------------------------------------------------------------------------------
+  Test                          Resultado
+  ─────────────────────────────────────────
+  tests/test_cases.py           110/110 (100%)
+  tests/test_refinar_api.py     5/5 (100%)
+  tests/test_backward_chaining  6/6 (100%)
+  tests/test_imagenes_completo  15/16 (93.8%) — última corrida Mac jul 2026
+                                · 8 imágenes con Claude OK
+                                · 8 en fallback TM+OpenCV (rate limit API)
+                                · 1 fallo: prueba12 Gatorade plástico → VIDRIO
+                                  (caso conocido; roadmap A3)
+
+Tiempo promedio flujo híbrido: ~2–3 s por imagen
+
+
+7. DOCUMENTACIÓN CREADA
+--------------------------------------------------------------------------------
+  · README.md — guía completa del proyecto
+  · docs/FLUJO_RECONOCIMIENTO.md — pipeline, costos API, checklist demo
+  · docs/ENTRENAMIENTO_MODELO.md — captura y entrenamiento local
+  · docs/AGENTE_ENTRENAMIENTO_LOCAL.md — guía Windows usuario + agente
+  · docs/RESUMEN_PROYECTO.txt — este archivo
+  · Roadmap demo funcional (A1–C3) en README — checklist de mejoras pendientes
+
+
+8. CAMBIOS PRINCIPALES POR VERSIÓN (changelog resumido)
+--------------------------------------------------------------------------------
+  v2.0  — SE base: 113 reglas, flujo TM+Gemini diseñado
+  v2.1  — Threading cámara, API híbrida, logging
+  v2.2  — Vasos blancos, platos, vasos vidrio (reglas + casos)
+  v2.3  — Snacks, cubiertos, pitillos; estadísticas API
+  v2.4  — Vidrio sin tapa (R161–R164, MR16)
+  v2.5  — Fallback TM + OpenCV; 16/16 imágenes sin API
+  v2.6  — Integración Claude Vision (Haiku por defecto)
+  v2.7  — refinar_atributos_api en fallback; mensaje "Material no permitido"
+  v2.8  — Entrenamiento local (scripts/entrenar_modelo.py); docs ampliadas
+
+
+9. EQUIPO Y SUBSISTEMAS
+--------------------------------------------------------------------------------
+  Axel Hernández      — SE + ML + integración IA
+  Paula Márquez       — App + nube + gestión
+  Leonela Sornoza     — App + nube + hardware/testing
+  Andrea Campaña      — SE + IA + hardware/testing
+
+  RECI Físico   — compartimentos, servo, sensores (pendiente integración)
+  RECI IA       — Raspberry Pi 4 + Python (este repo)
+  RECI Cloud    — FastAPI + Supabase + dashboard (pendiente)
+  RECI App      — mapa, recompensas (pendiente)
+
+
+10. COMPLETADO vs PENDIENTE
+--------------------------------------------------------------------------------
+  COMPLETADO:
+    · SE 174 reglas + 16 meta-reglas + 110 pruebas
+    · Modelo ML propio + dataset ~21k fotos
+    · Flujo híbrido Claude/Gemini + fallback OpenCV
+    · Cámara demo + API REST + tests imagen
+    · Entrenamiento local sin Colab
+    · Documentación técnica y roadmap
+
+  EN PROGRESO:
+    · Roadmap A1–A8 (umbral conservador, reglas Gatorade, logs, triple captura)
+    · Demo cámara en vivo con Claude estable
+    · Hardware físico (servo, LEDs, ESP32)
+
+  PENDIENTE:
+    · Integración hardware completa
+    · Dashboard Next.js + Supabase Realtime
+    · App móvil y recompensas
+    · Movimiento autónomo en campus
+
+
+11. COMANDOS ÚTILES (Mac)
+--------------------------------------------------------------------------------
+  source .venv/bin/activate
+  python3 tests/test_cases.py
+  python3 tests/test_imagenes_completo.py --pausa 2
+  python3 vision/camera.py
+  python3 scripts/entrenar_modelo.py --dataset-base ~/RECI_dataset_propio
+  uvicorn api.app:app --reload --port 8000
+
+
+12. CRITERIOS DE ÉXITO DEL PROYECTO (referencia)
+--------------------------------------------------------------------------------
+  Precisión vidrio/plástico ≥ 85%     → 98.2% modelo · 93.8% batch 16 imgs
+  Tiempo respuesta híbrido ≤ 3 s      → ~2.4 s promedio OK
+  Demo acepta solo plástico/vidrio    → OK con mensaje rechazo unificado
+
+
+================================================================================
+  Generado: julio 2026 · Proyecto RECI · PUCE Manabí
+  Para detalle técnico: README.md y docs/ en el repositorio
+================================================================================
