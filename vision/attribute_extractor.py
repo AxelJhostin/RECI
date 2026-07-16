@@ -133,7 +133,7 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 REGLAS DE ANÁLISIS:
 - Analiza SOLO el objeto principal de la imagen
 - Confía en lo que VES — material, brillo, transparencia, forma de la tapa
-- LATA vs BOTELLA: si es cilindro de metal o lata de bebida → lata (NO botella_gaseosa ni botella_agua)
+- LATA vs BOTELLA (¡error frecuente!): la lata es un cilindro RECTO sin cuello — el borde superior es un aro de ALUMINIO PLATEADO plano con anilla. Una botella SIEMPRE tiene cuello que se estrecha con una tapa encima. Coca-Cola, Sprite y gaseosas existen en lata Y en botella: NO decidas por la marca. Si no ves cuello ni tapa → lata (NO botella_gaseosa ni botella_agua). Para lata usa: tapa=sellado, brillo=metalico, transparencia=ninguna, color=metalico o variado_vivo
 - VIDRIO vs PET: reflejo nítido + tapa metálica = vidrio; rosca plástica visible = PET
 - Si el objeto NO es plástico ni vidrio (papel, cartón, lata, metal, orgánico), usa el objeto_reconocido correcto
 - confianza_ml refleja qué tan seguro estás de tu análisis general
@@ -371,6 +371,10 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
                 f"El modelo detectó '{clase_tm}' con {prob_tm:.0%} de confianza.\n"
                 f"Úsalo como referencia inicial, pero confía en tu análisis visual "
                 f"si ves algo diferente — especialmente en material, brillo de tapa y textura.\n"
+                f"IMPORTANTE: este clasificador SOLO conoce dos clases (plastico, vidrio). "
+                f"Si el objeto real es una lata, metal, papel, cartón u orgánico, "
+                f"este contexto NO aplica — ignóralo por completo y usa el "
+                f"objeto_reconocido correcto (lata, carton, etc.).\n"
             )
             return self.PROMPT_BASE.replace(
                 "REGLAS DE ANÁLISIS:",
