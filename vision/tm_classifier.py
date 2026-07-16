@@ -2,9 +2,14 @@
 # Clasificador con modelo entrenado en Google Colab (MobileNetV2) exportado como TFLite
 # Misma interfaz que AttributeExtractor para intercambio transparente
 
+import os
+import sys
+from pathlib import Path
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import numpy as np
 import cv2
-from pathlib import Path
 
 from vision.visual_heuristics import refinar_atributos, refinar_atributos_api
 

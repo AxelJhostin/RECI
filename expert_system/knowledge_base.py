@@ -146,7 +146,8 @@ class KnowledgeBase:
             Rule("R19_N",  {"objeto_reconocido": "botella_gatorade", "confianza_ml": "media", "tapa": "rosca_plastico"}, "PLASTICO", 0.91, "Probable Gatorade con tapa rosca plástica → plástico"),
             Rule("R19_M2", {"objeto_reconocido": "botella_gatorade", "tapa": "twist_off_metalica",  "brillo": "alto_nitido"}, "VIDRIO", 0.95, "Envase tipo Gatorade con tapa twist-off metálica y brillo nítido → es vidrio, no plástico"),
             Rule("R19_M3", {"objeto_reconocido": "botella_gatorade", "tapa": "tapa_ancha_metalica", "brillo": "alto_nitido"}, "VIDRIO", 0.95, "Envase tipo Gatorade con tapa metálica ancha y brillo nítido → es vidrio"),
-            Rule("R19_M4", {"objeto_reconocido": "botella_gatorade", "brillo": "medio_difuso"}, "PLASTICO", 0.90, "Envase tipo Gatorade con brillo medio difuso (no nítido) → plástico PET deportivo"),
+            Rule("R19_M4", {"objeto_reconocido": "botella_gatorade", "brillo": "medio_difuso", "tapa": "rosca_plastico"}, "PLASTICO", 0.90, "Gatorade con brillo medio difuso y tapa rosca plástica → PET deportivo"),
+            Rule("R19_M5", {"objeto_reconocido": "botella_gatorade", "tapa": "twist_off_metalica", "brillo": "medio_difuso"}, "VIDRIO", 0.93, "Gatorade con tapa twist-off metálica aunque el brillo sea difuso → vidrio (473ml)"),
 
             # ── Nuevos objetos: vasos blancos, vasos de vidrio, platos y recipientes ──
             Rule("R19_O", {"objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "alta"},  "PLASTICO", 0.98, "Vaso blanco opaco de plástico identificado — café, chocolate u otras bebidas calientes"),

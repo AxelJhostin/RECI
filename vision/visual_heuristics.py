@@ -6,6 +6,105 @@
 import cv2
 import numpy as np
 
+# ── A4: objetos PET que la API puede identificar con confianza ─────────────
+_OBJETOS_PET = frozenset({
+    "botella_agua", "botella_gaseosa", "botella_gatorade",
+    "botella_energizante", "botella_jugo_plastico", "botella_enjuague_bucal",
+    "botella_fioravanti", "botella_cola_gallito", "vaso_plastico",
+    "vaso_plastico_blanco", "recipiente_plastico",
+})
+
+_OBJETOS_VIDRIO = frozenset({
+    "botella_cerveza_vidrio", "botella_jugo_vidrio", "botella_mocachino",
+    "botella_salsa_vidrio", "botella_pony_malta", "frasco_vidrio", "vaso_vidrio",
+})
+
+
+def _api_lectura_pet_fiable(atributos: dict) -> bool:
+    """
+    Claude/Gemini identificó PET con señales físicas claras (rosca plástica,
+    brillo difuso). OpenCV no debe convertir esto a vidrio por reflejos.
+
+    botella_gatorade se excluye: existe en vidrio y plástico (A3 decide por tapa).
+    """
+    obj = atributos.get("objeto_reconocido", "")
+    if obj == "botella_gatorade":
+        return False
+    if obj not in _OBJETOS_PET:
+        return False
+    if atributos.get("tapa") != "rosca_plastico":
+        return False
+    return atributos.get("brillo") != "alto_nitido"
+
+
+def _flip_de_pet_a_vidrio(antes: dict, despues: dict) -> bool:
+    """True si el refinado cambió material plástico → vidrio."""
+    obj_antes = antes.get("objeto_reconocido", "")
+    obj_despues = despues.get("objeto_reconocido", "")
+    if obj_antes in _OBJETOS_PET and obj_despues in _OBJETOS_VIDRIO:
+        return True
+    if obj_antes in _OBJETOS_PET and obj_despues == obj_antes:
+        tapa_flip = (
+            antes.get("tapa") == "rosca_plastico"
+            and despues.get("tapa") in ("twist_off_metalica", "tapa_ancha_metalica", "corona_metalica")
+        )
+        brillo_flip = (
+            antes.get("brillo") in ("medio_difuso", "bajo")
+            and despues.get("brillo") == "alto_nitido"
+        )
+        if tapa_flip and brillo_flip:
+            return True
+    return False
+
+
+def _corregir_gatorade_ambiguo(atributos: dict, clase_tm: str,
+                               prob_tm: float) -> dict:
+    """
+    Gatorade PET con tapa metálica mal etiquetada por Claude cuando TM
+    no es concluyente (prueba12 en cámara).
+    """
+    out = dict(atributos)
+    obj = out.get("objeto_reconocido", "")
+    tapa = out.get("tapa", "")
+    tm_inseguro = (
+        (clase_tm == "vidrio" and (prob_tm or 0) < 0.70)
+        or (clase_tm == "plastico" and prob_tm is not None and prob_tm < 0.85)
+    )
+    if (
+        obj == "botella_gatorade"
+        and tapa in ("twist_off_metalica", "tapa_ancha_metalica", "corona_metalica")
+        and out.get("brillo") == "medio_difuso"
+        and tm_inseguro
+    ):
+        out["tapa"] = "rosca_plastico"
+        out["confianza_ml"] = "media"
+    return out
+
+
+def _aplicar_veto_consenso_api(antes: dict, despues: dict,
+                               tm_seguro_plastico: bool,
+                               clase_tm: str = None,
+                               prob_tm: float = None) -> dict:
+    """Revoca un flip indebido PET→vidrio (A4)."""
+    despues = _corregir_gatorade_ambiguo(despues, clase_tm, prob_tm)
+    if _api_lectura_pet_fiable(antes) and _flip_de_pet_a_vidrio(antes, despues):
+        return dict(antes)
+    if tm_seguro_plastico and _flip_de_pet_a_vidrio(antes, despues):
+        return dict(antes)
+    return despues
+
+
+def _tm_seguro_plastico(clase_tm: str, prob_tm: float, prob_vidrio: float) -> bool:
+    prob_v = prob_vidrio if prob_vidrio is not None else (
+        prob_tm if clase_tm == "vidrio" else (1.0 - prob_tm if prob_tm else 0.0)
+    )
+    return (
+        clase_tm == "plastico"
+        and prob_tm is not None
+        and prob_tm >= 0.92
+        and prob_v < 0.06
+    )
+
 
 def _roi_centro(img: np.ndarray, fraccion: float = 0.6) -> np.ndarray:
     """Recorta la región central donde suele estar el objeto."""
@@ -130,7 +229,26 @@ def refinar_atributos(atributos: dict, img_bgr: np.ndarray,
         })
         return out
 
-    # ── 2. VASO PLÁSTICO (TM dice vidrio pero no brilla como vidrio) ──
+    # ── 2. TM vidrio INSEGURO (<70%) → PET salvo señal fuerte de vidrio ──
+    tm_vidrio_debil = (
+        clase_tm == "vidrio" and prob_tm is not None and prob_tm < 0.70
+    )
+    senal_vidrio_fuerte = brillo_vidrio and (gr > 0.10 or ar > 0.14) and sat < 50
+    if tm_vidrio_debil and not senal_vidrio_fuerte:
+        out.update({
+            "objeto_reconocido": "botella_gatorade",
+            "transparencia":     "alta",
+            "color":             "variado_vivo",
+            "forma":             "cilindrica_estandar",
+            "brillo":            "medio_difuso",
+            "tapa":              "rosca_plastico",
+            "textura":           "lisa_brillante",
+            "rigidez":           "rigido",
+            "confianza_ml":      "media",
+        })
+        return out
+
+    # ── 3. VASO PLÁSTICO (TM dice vidrio pero no brilla como vidrio) ──
     # Cubre vasos blancos de café y vasos de chocolate/chocolate mate
     parece_vaso_plastico = (
         clase_tm == "vidrio"
@@ -152,7 +270,7 @@ def refinar_atributos(atributos: dict, img_bgr: np.ndarray,
         })
         return out
 
-    # ── 3. VIDRIO cuando TM dice plástico ─────────────────────────────
+    # ── 4. VIDRIO cuando TM dice plástico ─────────────────────────────
     # Solo si TM NO está muy seguro de plástico Y hay señal fuerte ámbar/verde.
     # Evita convertir botellas PET transparentes en vidrio por reflejos del fondo.
     tm_seguro_plastico = (
@@ -188,7 +306,7 @@ def refinar_atributos(atributos: dict, img_bgr: np.ndarray,
         })
         return out
 
-    # ── 4. Refinamiento parcial (sin cambiar objeto_reconocido) ───────
+    # ── 5. Refinamiento parcial (sin cambiar objeto_reconocido) ───────
     if brillo_vidrio:
         out["brillo"] = "alto_nitido"
     elif sr > 0.012:
@@ -222,6 +340,7 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
     Post-procesa atributos de Claude/Gemini con OpenCV + contexto TM.
     Corrige errores frecuentes: latas como botellas, vidrio con rosca_plastico.
     """
+    atributos_originales = dict(atributos)
     senales = extraer_senales_visuales(img_bgr)
     if not senales or not atributos:
         return atributos
@@ -268,16 +387,15 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         prob_tm if clase_tm == "vidrio" else (1.0 - prob_tm if prob_tm else 0.0)
     )
     tm_sugiere_vidrio = clase_tm == "vidrio" or prob_v >= 0.06
-    tm_seguro_plastico = (
-        clase_tm == "plastico"
-        and prob_tm is not None
-        and prob_tm >= 0.92
-        and prob_v < 0.06
-    )
+    tm_seguro_plastico = _tm_seguro_plastico(clase_tm, prob_tm, prob_vidrio)
+    api_pet_fiable = _api_lectura_pet_fiable(out)
+    permitir_flip_vidrio = not api_pet_fiable and not tm_seguro_plastico
 
     # ── Prioridad 1: TM dice vidrio (o probabilidad vidrio ≥ 6%) ───────
-    if (clase_tm == "vidrio" and (prob_tm or 0) >= 0.75) or (
-        tm_sugiere_vidrio and brillo_vidrio and elong and aspect >= 1.05
+    if permitir_flip_vidrio and (
+        (clase_tm == "vidrio" and (prob_tm or 0) >= 0.75) or (
+            tm_sugiere_vidrio and brillo_vidrio and elong and aspect >= 1.05
+        )
     ):
         if tapa == "rosca_plastico":
             out["tapa"] = "twist_off_metalica"
@@ -296,11 +414,15 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
             else:
                 out.update({"objeto_reconocido": "botella_jugo_vidrio"})
         out["confianza_ml"] = "alta" if (prob_tm or 0) >= 0.88 else "media"
-        return out
+        return _aplicar_veto_consenso_api(
+            atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
 
     # ── Prioridad 1b: vidrio ámbar fuerte (Gatorade vidrio, cerveza) ───
     # Señal ámbar alta + brillo nítido — no confundir con PET claro (ar < 0.08).
-    if brillo_vidrio and ar > 0.14 and sr > 0.038 and sat < 60:
+    if (
+        permitir_flip_vidrio
+        and brillo_vidrio and ar > 0.14 and sr > 0.038 and sat < 60
+    ):
         if obj in ("botella_agua", "botella_gaseosa", "botella_gatorade",
                    "botella_energizante", "desconocido"):
             out.update({
@@ -312,11 +434,12 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
                 "forma":             "cilindrica_estandar",
                 "confianza_ml":      "media",
             })
-            return out
+            return _aplicar_veto_consenso_api(
+                atributos_originales, out, tm_seguro_plastico)
 
     # ── Prioridad 2: señales visuales de vidrio transparente ───────────
     if (
-        not tm_seguro_plastico
+        permitir_flip_vidrio
         and tm_sugiere_vidrio
         and brillo_vidrio
         and es_transparente
@@ -329,10 +452,11 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
             out["color"] = "transparente"
             out["transparencia"] = "alta"
             out["confianza_ml"] = "media"
-        return out
+        return _aplicar_veto_consenso_api(
+            atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
 
     if (
-        not tm_seguro_plastico
+        permitir_flip_vidrio
         and tm_sugiere_vidrio
         and brillo_vidrio
         and es_opaco_real
@@ -347,7 +471,8 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
                 "tapa":              "twist_off_metalica" if tapa == "rosca_plastico" else tapa,
                 "confianza_ml":      "media",
             })
-        return out
+        return _aplicar_veto_consenso_api(
+            atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
 
     # ── Prioridad 3: lata / metal ─────────────────────────────────────
     if tm_seguro_plastico:
@@ -389,7 +514,8 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
             "textura":           "lisa_brillante",
             "rigidez":           "rigido",
         })
-        return out
+        return _aplicar_veto_consenso_api(
+            atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
 
     if api_dice_transparente_pero_no_lo_es and api_dice_botella and forma_lata:
         out.update({
@@ -399,6 +525,8 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
             "tapa":              "sellado",
             "confianza_ml":      "media",
         })
-        return out
+        return _aplicar_veto_consenso_api(
+            atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
 
-    return out
+    return _aplicar_veto_consenso_api(
+        atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
