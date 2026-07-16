@@ -137,8 +137,15 @@ class KnowledgeBase:
             # Cola Gallito y Gatorade
             Rule("R19_K", {"objeto_reconocido": "botella_cola_gallito", "confianza_ml": "alta"},  "PLASTICO", 0.98, "Cola Gallito identificada — gaseosa ecuatoriana en plástico, similar a Coca-Cola"),
             Rule("R19_L", {"objeto_reconocido": "botella_cola_gallito", "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable Cola Gallito con confianza media — gaseosa ecuatoriana"),
-            Rule("R19_M", {"objeto_reconocido": "botella_gatorade",     "confianza_ml": "alta"},  "PLASTICO", 0.98, "Gatorade identificado — bebida deportiva en plástico boca ancha"),
-            Rule("R19_N", {"objeto_reconocido": "botella_gatorade",     "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable Gatorade con confianza media — bebida deportiva plástico"),
+            # A3 — Gatorade decidido por MATERIAL físico, no solo por marca.
+            # Tapa rosca plástica → PET deportivo (plástico). Tapa metálica +
+            # brillo nítido → el envase es realmente vidrio (evita el falso
+            # PLASTICO "por marca" que fallaba en prueba12/prueba10).
+            Rule("R19_M",  {"objeto_reconocido": "botella_gatorade", "confianza_ml": "alta",  "tapa": "rosca_plastico"}, "PLASTICO", 0.98, "Gatorade con tapa rosca plástica y alta confianza → PET deportivo (plástico)"),
+            Rule("R19_N",  {"objeto_reconocido": "botella_gatorade", "confianza_ml": "media", "tapa": "rosca_plastico"}, "PLASTICO", 0.91, "Probable Gatorade con tapa rosca plástica → plástico"),
+            Rule("R19_M2", {"objeto_reconocido": "botella_gatorade", "tapa": "twist_off_metalica",  "brillo": "alto_nitido"}, "VIDRIO", 0.95, "Envase tipo Gatorade con tapa twist-off metálica y brillo nítido → es vidrio, no plástico"),
+            Rule("R19_M3", {"objeto_reconocido": "botella_gatorade", "tapa": "tapa_ancha_metalica", "brillo": "alto_nitido"}, "VIDRIO", 0.95, "Envase tipo Gatorade con tapa metálica ancha y brillo nítido → es vidrio"),
+            Rule("R19_M4", {"objeto_reconocido": "botella_gatorade", "brillo": "medio_difuso"}, "PLASTICO", 0.90, "Envase tipo Gatorade con brillo medio difuso (no nítido) → plástico PET deportivo"),
 
             # ── Nuevos objetos: vasos blancos, vasos de vidrio, platos y recipientes ──
             Rule("R19_O", {"objeto_reconocido": "vaso_plastico_blanco", "confianza_ml": "alta"},  "PLASTICO", 0.98, "Vaso blanco opaco de plástico identificado — café, chocolate u otras bebidas calientes"),

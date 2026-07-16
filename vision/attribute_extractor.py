@@ -103,6 +103,7 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
 
   DIFERENCIAS CLAVE para objetos blancos:
   - vaso_plastico_blanco: blanco opaco, CÓNICO o cilíndrico, brillo difuso (plástico), forma de vaso de cafetería
+  - vaso_carton vs vaso_plastico_blanco: NO te guíes por la impresión — los vasos de cafetería del campus con diseño impreso tipo kraft/café (palabras CHOCOLATE, CAPUCCINO, LATTE, ESPRESSO...) son de PLÁSTICO blanco → vaso_plastico_blanco. El cartón REAL muestra: costura lateral vertical visible donde se une el papel, textura fibrosa mate y borde superior sin brillo. Si el interior es blanco liso con leve brillo y no hay costura de papel → vaso_plastico_blanco
   - yogur_plastico: blanco opaco, CILÍNDRICO ANCHO (más gordo que un vaso), para yogur o lácteos
   - plato_plastico: blanco opaco, PLANO (rectangular o circular visto desde arriba), rígido
   - papel_servilleta: blanco opaco, PLANO pero FLEXIBLE y fibroso, textura diferente al plástico
@@ -421,19 +422,36 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin
         )
 
     def _imagen_a_base64(self, ruta_imagen: str) -> tuple:
-        """Convierte imagen a base64 y detecta el tipo MIME."""
-        ruta = Path(ruta_imagen)
-        extension = ruta.suffix.lower()
-        mime_types = {
-            ".jpg":  "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png":  "image/png",
-            ".webp": "image/webp",
-            ".gif":  "image/gif"
-        }
-        mime_type = mime_types.get(extension, "image/jpeg")
+        """
+        Convierte imagen a base64 y detecta el tipo MIME.
+
+        El MIME se detecta por los bytes mágicos del archivo (no por la
+        extensión): un PNG renombrado a .jpeg enviado como image/jpeg hace
+        que la API rechace la petición con HTTP 400 y todo caiga a fallback.
+        """
         with open(ruta_imagen, "rb") as f:
-            datos = base64.b64encode(f.read()).decode("utf-8")
+            contenido = f.read()
+
+        if contenido.startswith(b"\xff\xd8\xff"):
+            mime_type = "image/jpeg"
+        elif contenido.startswith(b"\x89PNG\r\n\x1a\n"):
+            mime_type = "image/png"
+        elif contenido[:4] == b"RIFF" and contenido[8:12] == b"WEBP":
+            mime_type = "image/webp"
+        elif contenido.startswith((b"GIF87a", b"GIF89a")):
+            mime_type = "image/gif"
+        else:
+            # Fallback: extensión del archivo
+            extension = Path(ruta_imagen).suffix.lower()
+            mime_type = {
+                ".jpg":  "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png":  "image/png",
+                ".webp": "image/webp",
+                ".gif":  "image/gif"
+            }.get(extension, "image/jpeg")
+
+        datos = base64.b64encode(contenido).decode("utf-8")
         return datos, mime_type
 
     @staticmethod

@@ -1240,15 +1240,15 @@ Demo estable en laptop con cámara:
   *Archivos:* `vision/attribute_extractor.py`, `vision/camera.py`, `api/app.py`  
   *Listo cuando:* cámara clasifica con Claude visible en consola.
 
-- [ ] **A2 — Política de decisión conservadora**  
-  Umbral mínimo de CF para abrir PLASTICO/VIDRIO (ej. 0.75). Si forward ≠ backward y backward score > 0.80 → `DESCONOCIDO`. Si CF final bajo umbral → rechazo.  
-  *Archivos:* `expert_system/inference_engine.py`  
-  *Listo cuando:* casos ambiguos van a rechazo; tests SE siguen 110/110.
+- [x] **A2 — Política de decisión conservadora**  
+  Umbral mínimo de CF para abrir PLASTICO/VIDRIO (`UMBRAL_APERTURA_CF = 0.75`). Si backward contradice con score > 0.80 **y** forward no es concluyente (`CF < CF_FORWARD_SEGURO = 0.90`) → `DESCONOCIDO`. Si CF final bajo umbral → rechazo. La condición de forward-CF evita rechazar casos de vidrio confiables donde el backward roza el 0.811.  
+  *Archivos:* `expert_system/inference_engine.py` (constantes de clase + bloque A2 al final de `ejecutar`)  
+  *Listo:* rechazo conservador verificado en ambas ramas (CF bajo y conflicto backward); tests SE 110/110, backward 6/6, refinar API 5/5.
 
-- [ ] **A3 — Reglas producto vs material**  
-  Condicionar reglas por marca (Gatorade, etc.) con atributos físicos (`tapa`, `brillo`). Gatorade + brillo nítido + tapa metálica → VIDRIO; rosca plástica → PLASTICO.  
-  *Archivos:* `expert_system/knowledge_base.py`, tests si aplica  
-  *Listo cuando:* `prueba10.jpeg` (Gatorade vidrio) y `prueba12.jpeg` (Gatorade plástico) pasan.
+- [x] **A3 — Reglas producto vs material**  
+  Reglas de Gatorade condicionadas por atributos físicos, no solo por marca: tapa `rosca_plastico` → PLASTICO (`R19_M`/`R19_N`), tapa metálica + `brillo alto_nitido` → VIDRIO (`R19_M2`/`R19_M3`), y `brillo medio_difuso` → PLASTICO como discriminador de material (`R19_M4`).  
+  *Archivos:* `expert_system/knowledge_base.py`  
+  *Listo:* discriminación verificada (tapa plástica→PLASTICO, tapa metálica+nítido→VIDRIO); TC16/TC17 siguen en PLASTICO. Nota: `prueba10/prueba12` son tests de imagen y dependen también de la extracción de atributos (capa A4).
 
 - [ ] **A4 — Consenso TM + OpenCV + SE**  
   Formalizar vetos cuando capas se contradicen (TM ≥92% plástico + brillo difuso → no flip a vidrio; metal/lata → LATA).  

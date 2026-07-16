@@ -10,6 +10,13 @@ from expert_system.certainty_factor import CertaintyFactor
 from expert_system.meta_rules import MetaRuleEngine
 
 class InferenceEngine:
+    # ── A2: Política de decisión conservadora ──────────────────────────
+    # Solo PLASTICO y VIDRIO abren una compuerta física. Ante la duda, se
+    # prefiere rechazar (DESCONOCIDO) antes que abrir la compuerta equivocada.
+    UMBRAL_APERTURA_CF = 0.75   # CF mínimo para abrir compuerta PLASTICO/VIDRIO
+    UMBRAL_BACKWARD    = 0.80   # score de backward que se considera contradicción
+    CF_FORWARD_SEGURO  = 0.90   # si forward supera esto, se confía pese a backward
+
     def __init__(self):
         self.kb                      = KnowledgeBase()
         self.memoria                 = WorkingMemory()
@@ -26,6 +33,7 @@ class InferenceEngine:
         self.cf_por_categoria        = {}
         self.meta_engine             = MetaRuleEngine()
         self.contexto_meta           = {}
+        self.motivo_rechazo_conservador = None
 
     def cargar_hechos(self, resultado_ml: dict):
         self.memoria.limpiar()
@@ -39,6 +47,7 @@ class InferenceEngine:
         self.score_backward          = 0.0
         self.cf_por_categoria        = {}
         self.contexto_meta           = {}
+        self.motivo_rechazo_conservador = None
 
         es_valido, errores, advertencias = self.validator.validar(resultado_ml)
         self.errores_validacion      = errores
@@ -151,6 +160,33 @@ class InferenceEngine:
                     'score_bw':      score_bw
                 })()
             )
+
+        # ── A2: Política de decisión conservadora ──────────────────────
+        # Solo PLASTICO y VIDRIO abren compuerta. Se rechaza (→ DESCONOCIDO)
+        # cuando (a) el CF final no alcanza el umbral de apertura, o
+        # (b) el backward chaining contradice con fuerza y el forward no es
+        #     concluyente. Si forward es muy seguro (CF ≥ CF_FORWARD_SEGURO)
+        #     se confía en él pese a la discrepancia del backward.
+        if self.conclusion_final in ("PLASTICO", "VIDRIO"):
+            motivo = None
+            if self.confianza_final < self.UMBRAL_APERTURA_CF:
+                motivo = (f"CF {self.confianza_final*100:.1f}% < umbral de apertura "
+                          f"{self.UMBRAL_APERTURA_CF*100:.0f}%")
+            elif (self.resultado_backward and
+                  self.resultado_backward not in ("LATA", "DESCONOCIDO") and
+                  self.resultado_backward != self.conclusion_final and
+                  self.score_backward > self.UMBRAL_BACKWARD and
+                  self.confianza_final < self.CF_FORWARD_SEGURO):
+                motivo = (f"backward sugiere {self.resultado_backward} "
+                          f"(score {self.score_backward*100:.1f}%) y forward no es "
+                          f"concluyente (CF {self.confianza_final*100:.1f}%)")
+
+            if motivo:
+                self.motivo_rechazo_conservador = motivo
+                self.conclusion_final = "DESCONOCIDO"
+                self.confianza_final  = 0.0
+                self.advertencias_validacion.append(
+                    f"[A2] Rechazo conservador → DESCONOCIDO: {motivo}")
 
         return self.conclusion_final, self.confianza_final, self.reglas_disparadas
 
