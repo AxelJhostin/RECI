@@ -99,6 +99,7 @@ class KnowledgeBase:
 
         self.reglas += [
             Rule("R01", {"objeto_reconocido": "botella_mocachino",    "confianza_ml": "alta"}, "VIDRIO",    0.98, "Botella de mocachino identificada con alta confianza — es vidrio ámbar pequeño"),
+            Rule("R01_B", {"objeto_reconocido": "botella_mocachino",  "confianza_ml": "media"}, "VIDRIO",   0.88, "Probable mocachino con confianza media — bebida de café en vidrio"),
             Rule("R02", {"objeto_reconocido": "botella_cerveza_vidrio","confianza_ml": "alta"}, "VIDRIO",    0.98, "Botella de cerveza (Pilsener/Club) identificada — vidrio con tapa corona"),
             Rule("R03", {"objeto_reconocido": "botella_salsa_vidrio",  "confianza_ml": "alta"}, "VIDRIO",    0.97, "Botella de salsa (Gustadina) identificada — vidrio con cuello largo"),
             Rule("R04", {"objeto_reconocido": "frasco_vidrio",         "confianza_ml": "alta"}, "VIDRIO",    0.97, "Frasco de mermelada o conserva identificado — vidrio ancho con tapa metálica"),
@@ -173,6 +174,16 @@ class KnowledgeBase:
 
             # VIDRIO — señales visuales fuertes
             Rule("R20", {"transparencia": "ninguna", "color": "ambar",        "tapa": "twist_off_metalica"}, "VIDRIO", 0.97, "Opaco ámbar con tapa metálica twist-off → botella de mocachino o similar"),
+            # Bebidas de café en vidrio: Claude etiqueta el líquido café como
+            # marron_tierra (no ambar). Con tapa metálica + rígido es vidrio,
+            # nunca orgánico (las reglas ORGANICO de marron_tierra exigen
+            # textura rugosa/fibrosa o forma irregular).
+            Rule("R20_B", {"color": "marron_tierra", "tapa": "twist_off_metalica",
+                           "rigidez": "rigido", "textura": "lisa_brillante"},
+                 "VIDRIO", 0.94, "Marrón café rígido liso con tapa twist-off metálica → bebida de café en vidrio (Caffe Lato)"),
+            Rule("R20_C", {"color": "marron_tierra", "brillo": "alto_nitido",
+                           "tapa": "twist_off_metalica", "rigidez": "rigido"},
+                 "VIDRIO", 0.95, "Marrón café con brillo nítido y tapa twist-off → vidrio con líquido de café"),
             Rule("R21", {"transparencia": "ninguna", "color": "ambar",        "tapa": "corona_metalica"},    "VIDRIO", 0.97, "Opaco ámbar con tapa corona → cerveza Pilsener"),
             Rule("R22", {"transparencia": "ninguna", "color": "verde_oscuro", "tapa": "corona_metalica"},    "VIDRIO", 0.97, "Verde oscuro con tapa corona → cerveza Club"),
             Rule("R23", {"transparencia": "alta",    "brillo": "alto_nitido", "forma": "cilindrica_estandar","tapa": "twist_off_metalica"}, "VIDRIO", 0.93, "Transparente con brillo nítido y tapa metálica → frasco o botella de vidrio"),

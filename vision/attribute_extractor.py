@@ -96,6 +96,8 @@ ATRIBUTOS REQUERIDOS (usa EXACTAMENTE estos valores):
   - Si el envase es transparente con reflejo nítido fuerte → probable VIDRIO → tapa metálica, NO rosca_plastico
   - botella_cerveza_vidrio | botella_jugo_vidrio | frasco_vidrio | vaso_vidrio para envases de vidrio
   - Si el clasificador rápido dijo "vidrio", confía en el material aunque la forma parezca botella de agua
+  - TAPA METÁLICA DE COLOR ≠ rosca_plastico: Gatorade, jugos y bebidas de café en VIDRIO usan tapa twist-off METÁLICA delgada pintada (naranja, roja, dorada). Una tapa plana, delgada y de borde liso es twist_off_metalica aunque sea de color; la rosca_plastico es más GRUESA, alta y con estrías verticales
+  - botella_gatorade existe en VIDRIO (473ml, cuello corto, hombros redondeados, tapa metálica de color) y en PLÁSTICO (boca ancha, tapa rosca plástica gruesa). Decide el material por el envase y la tapa, NO por la marca
 
   OBJETOS NO PERMITIDOS (no plástico ni vidrio):
   - lata, papel_servilleta, carton, tetra_pak, cascara_fruta, restos_comida → usar objeto_reconocido correcto
