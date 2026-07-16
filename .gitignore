@@ -11,3 +11,6 @@ capturas/
 images/api_uploads/
 images/capturas/
 logs/
+.venv/
+venv/
+env/
