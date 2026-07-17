@@ -18,8 +18,14 @@ type RobotPosition = Pick<
   'lat' | 'lng' | 'status' | 'recorded_at'
 >
 
-// PUCE Manabí (Chone) — fallback si todavía no hay puntos cargados.
-const CAMPUS_FALLBACK: [number, number] = [-0.6979, -80.0959]
+// PUCE Sede Manabí, campus PORTOVIEJO (Cdla. 1ro de Mayo, Eudoro Loor y 25 de
+// Diciembre). La sede tiene tres campus — Portoviejo, Chone y Bahía — y el
+// piloto es en Portoviejo. Coordenadas del nodo `university` de OSM, que es el
+// mismo dato que dibujan los tiles, así que el centro cae sobre el campus.
+//
+// Solo se usa como fallback cuando `robot_points` está vacía. Con los puntos
+// reales cargados, el mapa se centra en el promedio de ellos y esto no corre.
+const CAMPUS_FALLBACK: [number, number] = [-1.0381, -80.4692]
 
 const STATUS_LABEL: Record<RobotPosition['status'], string> = {
   idle: 'Disponible',
