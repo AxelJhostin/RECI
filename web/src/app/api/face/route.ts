@@ -2,6 +2,12 @@ import { type NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api'
 import { createClient } from '@/lib/supabase/server'
 
+const fileExtension = (photo: File) => {
+  if (photo.type === 'image/png') return 'png'
+  if (photo.type === 'image/webp') return 'webp'
+  return 'jpg'
+}
+
 // POST /api/face
 // El usuario activa el reconocimiento facial y sube su foto al Storage
 // Body: FormData con campo "photo" (File)
@@ -22,7 +28,13 @@ export async function POST(request: NextRequest) {
   const maxSize = 5 * 1024 * 1024 // 5 MB
   if (photo.size > maxSize) return err('La imagen no puede superar 5 MB', 413)
 
-  const storagePath = `faces/${user.id}/${Date.now()}.jpg`
+  const { data: currentEmbedding } = await supabase
+    .from('face_embeddings')
+    .select('storage_path')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  const storagePath = `faces/${user.id}/${Date.now()}.${fileExtension(photo)}`
   const arrayBuffer = await photo.arrayBuffer()
 
   const { error: uploadError } = await supabase.storage
@@ -43,8 +55,13 @@ export async function POST(request: NextRequest) {
     .upsert({ user_id: user.id, storage_path: storagePath, consent_signed_at: new Date().toISOString() })
 
   if (dbError) {
+    await supabase.storage.from('face-embeddings').remove([storagePath])
     console.error('face_embeddings upsert:', dbError.message)
     return err('Error al registrar el consentimiento', 500)
+  }
+
+  if (currentEmbedding?.storage_path && currentEmbedding.storage_path !== storagePath) {
+    await supabase.storage.from('face-embeddings').remove([currentEmbedding.storage_path])
   }
 
   // Marcar opt-in en el perfil
