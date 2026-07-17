@@ -237,13 +237,19 @@ Crear archivo `.env` en la raíz del proyecto (copiar desde `.env.example`):
 cp .env.example .env
 ```
 
-**Opción recomendada — Claude Haiku (demo):**
+**Opción recomendada — Claude Sonnet (demo):**
 
 ```bash
 VISION_API=claude
 ANTHROPIC_API_KEY=tu_api_key_aqui
-CLAUDE_MODEL=claude-haiku-4-5
+CLAUDE_MODEL=claude-sonnet-4-6
 ```
+
+> **¿Por qué Sonnet y no Haiku?** Haiku (~5× más barato) confunde latas con
+> botellas por la marca (lata de Coca-Cola → `botella_gaseosa` → abría la
+> compuerta de plástico) y oscila con el Gatorade de vidrio. Verificado
+> jul 2026: Sonnet clasificó 39/39 capturas reales de cámara sin errores,
+> con Haiku como fallback automático. Costo Sonnet: ~$0.005–0.01/foto.
 
 Obtener API key en: https://console.anthropic.com/ (mínimo de recarga ~$5)
 
