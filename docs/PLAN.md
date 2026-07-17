@@ -42,10 +42,18 @@ Si buscas el alcance, los criterios de aceptación o los riesgos, eso vive en [`
 
 | Tema | Quién decide | Cuándo |
 | --- | --- | --- |
-| Proveedor de mapas (Leaflet+OSM gratis vs Mapbox token) | Paula | Antes de Fase 6 |
+| 🔴 **Puntos fijos del campus (coordenadas y nombres GPS)** | Paula con Decanato | **Vencido** — era "antes de Fase 6" |
 | Dataset propio: cómo etiquetamos y dónde lo guardamos | Axel | Antes de Fase 3 |
-| Puntos fijos del campus (coordenadas y nombres GPS) | Paula con Decanato | Antes de Fase 6 |
 | Framework ML para inferencia en Vercel: TF.js vs ONNX Runtime | Axel + Paula | Antes de Fase 3 |
+
+> **Los puntos del campus ya son el bloqueante #1 del Flujo B.** La tabla
+> `robot_points` está vacía en Supabase, y sin filas ahí: la pantalla Llamar
+> muestra "Todavía no hay puntos del campus configurados", no hay a dónde mandar
+> a Reci, y `/api/robot/position` no tiene de dónde sacar lat/lng (la posición es
+> simbólica, ver decisiones técnicas). Todo el código de despacho está escrito y
+> no se puede probar end-to-end hasta que existan esos puntos.
+
+> Resuelto: proveedor de mapas → **Leaflet + OSM** (implementado en Fase 6, sin token).
 
 ---
 
@@ -65,6 +73,9 @@ Las decisiones del acta dejaban algunos "A o B" abiertos. Esto es lo que cerramo
 | **Sistema de visión** | **ESP32-CAM + OV2640** (era Raspberry Pi 4) | Sin Raspberry Pi. La ESP32-CAM captura imagen y la envía al cloud via WiFi. La IA corre en el servidor, no en el robot. |
 | **Inferencia IA** | **Cloud (Next.js API route `/api/vision/classify`)** (era TF Lite local) | La ESP32-CAM no tiene capacidad de inferencia local. El modelo entrena en Colab y se despliega en Vercel. |
 | **Comunicación interna** | **UART Serial entre ESP32-CAM y Arduino Mega** (era UART Raspberry↔ESP32) | Protocolo `CMD:<accion>:<param>\n`. La ESP32-CAM recibe la decisión del cloud y la reenvía al Arduino. |
+| **Despacho de llamadas al robot** | **Polling HTTP cada 3s** (era "webhook o canal Realtime") | El webhook necesita que el robot sea alcanzable desde internet, y va a estar detrás del NAT del WiFi del campus sin IP pública. Realtime es WebSocket+TLS+protocolo Phoenix sobre un ESP32-CAM que ya tiene la RAM comida por el framebuffer de la cámara: frágil. Polling es aburrido, funciona detrás de NAT y para "ven a buscarme" 3s de latencia nadie los nota. Contrato en [`API-ROBOT.md`](API-ROBOT.md). |
+| **Posición del robot** | **Simbólica por punto, sin GPS** | No hay GPS en el BOM y Reci solo se mueve entre puntos fijos. Reporta `point_id` y el cloud resuelve lat/lng desde `robot_points`. Cero hardware nuevo y el mapa no cambia. Un NEO-6M daría 2–5m de error entre edificios y nada bajo techo: no vale la integración. |
+| **Llave del robot** | **`ROBOT_API_KEY` propia** (era la service role key) | El firmware va grabado en un aparato que vive en el campus y se puede desarmar, así que esa llave hay que darla por comprometida. La service role key se salta todo el RLS: con ella se lee la tabla de usuarios entera. La llave del robot solo abre las 4 rutas del robot y se revoca sola. |
 | **Energía** | **Power Bank 10,000 mAh** (lógica) + **LiPo** (motores) + **LM2596** (regulador) | Separación de circuitos para evitar interferencias y proteger la electrónica. |
 
 ---
@@ -93,7 +104,7 @@ Las 8 fases del acta, traducidas a entregables concretos y quién los hace. Las 
 - [ ] **Leonela** · ensamble chasis + ruedas + 2×L298N + 4 motorreductores TT
 - [ ] **Leonela** · firmware Arduino Mega base: `forward / backward / stop / turn`
 - [ ] **Leonela** · sensores HC-SR04 con parada automática a ≤ 20 cm
-- [ ] **Leonela** · pantalla OLED 0.96" I2C mostrando estado del robot
+- [ ] **Leonela** · pantalla OLED 0.96" I2C mostrando estado del robot — la cara de Reci ya está escrita en `firmware/arduino-mega/Display.h` (`CMD:FACE:<estado>`), falta probarla contra el OLED real
 - [ ] **Andrea** · Power Bank (lógica) + LiPo (motores) + LM2596 (regulador) + cableado
 - [ ] **Andrea** · prueba de movimiento punto-a-punto sobre cinta marcada
 
@@ -150,7 +161,10 @@ Las 8 fases del acta, traducidas a entregables concretos y quién los hace. Las 
 **Objetivo:** los 3 flujos (A, B, C del acta) funcionan sin intervención manual.
 
 - [ ] **Axel** · cliente Reci Cloud desde la ESP32-CAM en C++ (POST eventos, position, compartments)
-- [ ] **Paula** · webhook o canal Realtime que despacha el comando "ven al punto X" hacia el robot
+- [x] **Paula** · despacho de "ven al punto X" hacia el robot — `GET /api/robot/calls/next` + `POST /api/robot/calls/update` (polling, ver decisiones técnicas)
+- [x] **Paula** · contrato HTTP documentado para el firmware en [`API-ROBOT.md`](API-ROBOT.md)
+- [ ] **Paula** · migración `20260716000001_robot_calls_dispatch.sql` aplicada en Supabase + `ROBOT_API_KEY` en Vercel
+- [ ] **Paula** · la app reacciona por Realtime a la llamada (`Reci aceptó` / `Reci llegó`) en `/app/llamar`
 - [ ] **Equipo** · prueba completa de Flujo A (reciclaje estándar)
 - [ ] **Equipo** · prueba completa de Flujo B (llamada desde la app)
 - [ ] **Equipo** · prueba completa de Flujo C (facial opt-in)
@@ -245,8 +259,10 @@ Endpoints REST mínimos (Next.js Route Handlers en `web/src/app/api/`):
 
 Por orden:
 
-1. **Paula** — service worker para que la PWA sea instalable/offline (último punto abierto de Fase 6 técnica).
-2. **Paula** — UI del opt-in facial (subida de foto + revocación de consentimiento).
-3. **Paula** — Push notifications (Web Push API + worker), hoy marcado "soon" en `/app/ajustes`.
-4. **Axel** — captura del dataset propio y transfer learning de MobileNet v2 (Fase 3), sigue siendo el bloqueante más grande para tener el robot completo end-to-end.
-5. **Leonela + Andrea** — ensamble físico siguiendo `docs/CONEXIONES.md` (Fase 2 → Fase 4).
+1. **Paula** — 🔴 **levantar los puntos fijos del campus con el Decanato y cargarlos en `robot_points`.** Es barato (una tarde con un GPS de celular) y desbloquea todo el Flujo B, que hoy está escrito y sin poder probarse.
+2. **Paula** — aplicar `20260716000001_robot_calls_dispatch.sql` en Supabase y poner `ROBOT_API_KEY` en Vercel.
+3. **Paula** — la app reacciona por Realtime a "Reci aceptó / llegó" en `/app/llamar`.
+4. **Andrea** — cliente HTTP en la ESP32-CAM contra [`API-ROBOT.md`](API-ROBOT.md); el contrato ya está cerrado, no hace falta esperar a la IA.
+5. **Paula** — service worker (PWA offline), opt-in facial y push notifications (cierre de Fase 6).
+6. **Axel** — captura del dataset propio y transfer learning de MobileNet v2 (Fase 3), sigue siendo el bloqueante más grande para el Flujo A.
+7. **Leonela + Andrea** — ensamble físico siguiendo `docs/CONEXIONES.md` (Fase 2 → Fase 4).
