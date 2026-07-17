@@ -204,6 +204,7 @@ export interface Database {
         Row: {
           id: string
           robot_id: string
+          point_id: string | null
           lat: number
           lng: number
           status: RobotStatus
@@ -212,6 +213,7 @@ export interface Database {
         Insert: {
           id?: string
           robot_id?: string
+          point_id?: string | null
           lat: number
           lng: number
           status?: RobotStatus
@@ -220,6 +222,7 @@ export interface Database {
         Update: {
           id?: string
           robot_id?: string
+          point_id?: string | null
           lat?: number
           lng?: number
           status?: RobotStatus

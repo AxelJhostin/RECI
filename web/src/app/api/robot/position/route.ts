@@ -2,18 +2,28 @@ import { type NextRequest } from 'next/server'
 import { ok, err, requireRobotAuth, createServiceClient } from '@/lib/api'
 
 // POST /api/robot/position
-// Llamado por la Raspberry Pi periódicamente para reportar posición
-// Body: { lat, lng, status? }
+// El robot reporta dónde está. Body: { point_id, status? }
+//
+// Reci no tiene GPS: solo se mueve entre los puntos fijos de robot_points,
+// así que reporta el punto y aquí resolvemos lat/lng desde la tabla. Con
+// status=moving el punto es el DESTINO (Reci va hacia allá, no está ahí).
+//
+// Guardamos lat/lng igual que siempre, así que el mapa y el Realtime del
+// front no se enteran del cambio.
+//
+// El firmware debe llamar esto cuando el estado CAMBIA (salgo / llego),
+// no en cada ciclo del loop: cada POST es una fila nueva y un evento de
+// Realtime hacia todas las apps abiertas.
 export async function POST(request: NextRequest) {
   if (!requireRobotAuth(request)) return err('No autorizado', 401)
 
   let body: unknown
   try { body = await request.json() } catch { return err('Body inválido', 400) }
 
-  const { lat, lng, status = 'idle' } = body as Record<string, unknown>
+  const { point_id, status = 'idle' } = body as Record<string, unknown>
 
-  if (typeof lat !== 'number' || typeof lng !== 'number') {
-    return err('lat y lng son requeridos y deben ser números', 400)
+  if (!point_id || typeof point_id !== 'string') {
+    return err('point_id es requerido', 400)
   }
 
   if (!['idle', 'moving', 'charging'].includes(status as string)) {
@@ -21,10 +31,24 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServiceClient()
+
+  const { data: point } = await supabase
+    .from('robot_points')
+    .select('id, lat, lng')
+    .eq('id', point_id)
+    .single()
+
+  if (!point) return err('Punto no encontrado', 404)
+
   const { data, error } = await supabase
     .from('robot_positions')
-    .insert({ lat, lng, status: status as 'idle' | 'moving' | 'charging' })
-    .select('id, lat, lng, status, recorded_at')
+    .insert({
+      point_id: point.id,
+      lat: point.lat,
+      lng: point.lng,
+      status: status as 'idle' | 'moving' | 'charging',
+    })
+    .select('id, point_id, lat, lng, status, recorded_at')
     .single()
 
   if (error) {

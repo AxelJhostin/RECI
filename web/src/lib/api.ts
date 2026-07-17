@@ -7,11 +7,18 @@ export const ok = (data: unknown, status = 200) =>
 export const err = (message: string, status: number) =>
   Response.json({ error: message }, { status })
 
-// Para rutas del robot/IA: valida que venga el service role key como Bearer token
+// Para rutas del robot/IA: valida el Bearer token contra ROBOT_API_KEY.
+// Es una llave aparte de la service role key a propósito: el firmware va
+// grabado en un ESP32-CAM que vive en el campus y se puede desarmar, así
+// que esa llave hay que darla por comprometida. Esta solo abre las rutas
+// del robot; la service role key nunca sale del servidor.
 export function requireRobotAuth(request: NextRequest): boolean {
+  const expected = process.env.ROBOT_API_KEY
+  if (!expected) return false
+
   const auth = request.headers.get('authorization') ?? ''
   const token = auth.replace('Bearer ', '').trim()
-  return token === process.env.SUPABASE_SERVICE_ROLE_KEY
+  return token === expected
 }
 
 // Para rutas de usuario: devuelve el user autenticado vía sesión
