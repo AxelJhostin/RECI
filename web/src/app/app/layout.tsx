@@ -10,9 +10,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!user) redirect('/login')
 
   return (
-    <div className="min-h-screen bg-zinc-50">
-      {/* pb-20 leaves room for the fixed bottom nav */}
-      <div className="pb-20">{children}</div>
+    <div className="mx-auto min-h-screen w-full max-w-lg bg-cream">
+      {/* pb-28 deja sitio para el nav inferior flotante */}
+      <div className="pb-28">{children}</div>
       <BottomNav />
     </div>
   )

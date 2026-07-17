@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { MapView } from './map-view'
 
@@ -8,32 +9,34 @@ export const metadata: Metadata = {
 
 export default async function MapaPage() {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  const [{ data: points }, { data: lastPosition }] = await Promise.all([
-    supabase
-      .from('robot_points')
-      .select('id, name, lat, lng, notes')
-      .eq('active', true),
+  const [{ data: points }, { data: lastPosition }, { data: profile }] = await Promise.all([
+    supabase.from('robot_points').select('id, name, lat, lng, notes').eq('active', true),
     supabase
       .from('robot_positions')
       .select('lat, lng, status, recorded_at')
       .order('recorded_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from('profiles').select('display_name, total_points').eq('id', user.id).single(),
   ])
 
-  return (
-    <div className="flex h-[calc(100vh-5rem)] flex-col">
-      <header className="space-y-0.5 px-4 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-zinc-900">Mapa del campus</h1>
-        <p className="text-sm text-zinc-500">
-          Encuentra a Reci y los puntos de reciclaje
-        </p>
-      </header>
+  const name = profile?.display_name?.split(' ')[0] ?? user.email?.split('@')[0] ?? 'reciclador'
 
-      <div className="relative flex-1 overflow-hidden">
-        <MapView points={points ?? []} initialPosition={lastPosition ?? null} />
-      </div>
+  return (
+    // -mb-28 cancela el padding del nav: el mapa llega hasta abajo, con su
+    // propio bottom sheet por encima de la barra de navegación.
+    <div className="relative -mb-28 h-[calc(100vh-1px)] overflow-hidden">
+      <MapView
+        points={points ?? []}
+        initialPosition={lastPosition ?? null}
+        greetingName={name}
+        totalPoints={profile?.total_points ?? 0}
+      />
     </div>
   )
 }

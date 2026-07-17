@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { CouponList } from './coupon-list'
+import { Icon } from '@/components/icon'
 
 export const metadata: Metadata = {
   title: 'Cupones',
@@ -22,23 +23,20 @@ export default async function CuponesPage() {
   ])
 
   return (
-    <main className="mx-auto max-w-lg space-y-6 px-4 py-10">
-      <header className="flex items-start justify-between">
-        <div className="space-y-1">
-          <span className="text-3xl">🎟️</span>
-          <h1 className="text-xl font-bold text-zinc-900">Cupones</h1>
-          <p className="text-sm text-zinc-500">Canjea tus puntos por recompensas</p>
+    <main className="space-y-5 px-[18px] pb-4">
+      <header className="flex items-end justify-between px-1 pt-16">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: 'var(--green)' }}>
+            Tienda de premios
+          </div>
+          <h1 className="mt-1.5 text-[28px] font-extrabold tracking-tight">Cupones</h1>
         </div>
-        <div className="rounded-xl bg-emerald-500 px-4 py-2 text-right text-white">
-          <p className="text-xs opacity-80">Tus puntos</p>
-          <p className="text-xl font-bold">{profile?.total_points ?? 0}</p>
-        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[15px] font-extrabold" style={{ background: 'var(--gold-50)', color: '#7a5a10' }}>
+          <Icon name="leaf" size={17} stroke="var(--gold)" /> {(profile?.total_points ?? 0).toLocaleString('es-EC')}
+        </span>
       </header>
 
-      <CouponList
-        coupons={coupons ?? []}
-        initialPoints={profile?.total_points ?? 0}
-      />
+      <CouponList coupons={coupons ?? []} initialPoints={profile?.total_points ?? 0} />
     </main>
   )
 }

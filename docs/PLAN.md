@@ -1,7 +1,7 @@
 # Reci — Plan maestro
 
 > Documento vivo. Se actualiza cada vez que cerramos una fase o cambiamos una decisión.
-> Última actualización: 2026-06-02 · semana 1.
+> Última actualización: 2026-07-01 · Fase 6 en curso.
 
 Este documento responde a tres preguntas en orden:
 
@@ -27,11 +27,16 @@ Si buscas el alcance, los criterios de aceptación o los riesgos, eso vive en [`
 - ✅ Página `/login` y ruta `/app` protegida funcionando.
 - ✅ 8 API routes implementadas (recycle, robot position, calls, coupons, compartments, face, vision/classify).
 - ✅ Hardware final definido: Arduino Mega 2560 + ESP32-CAM (ver decisiones técnicas).
+- ✅ Guía de conexiones de hardware documentada (`docs/CONEXIONES.md`), orden de ensamble por etapas para Leonela + Andrea.
+- ✅ Las 5 pantallas de la app (home/mapa, llamar, historial, cupones, ajustes) conectadas a las API routes.
+- ✅ Rediseño visual: tipografía Poppins, paleta cream/ink, mascota de Reci (`web/src/components/reci-mascot.tsx`).
+- ✅ PWA instalable: `manifest.ts` + iconos generados dinámicamente con `next/og` (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png` con safe-zone para Android adaptive icons).
 
 ### En curso
 
 - **Fase 5 completada** — backend y nube listos para integrarse con el hardware.
-- Pendiente: pantallas de la app (Fase 6) y modelo de visión (Fase 3).
+- **Fase 6 en curso** — pantallas y rediseño visual listos, PWA instalable lista. Falta: service worker (offline) y push notifications (marcado "soon" en `/app/ajustes`).
+- Pendiente: modelo de visión (Fase 3).
 
 ### Bloqueado / pendiente de decidir
 
@@ -131,13 +136,13 @@ Las 8 fases del acta, traducidas a entregables concretos y quién los hace. Las 
 
 **Objetivo:** la app es usable end-to-end.
 
-- [ ] **Paula** · mapa del campus con Leaflet (o Mapbox) + 2–3 puntos fijos
-- [ ] **Paula** · posición de Reci en tiempo real via Supabase Realtime
-- [ ] **Paula** · botón "Llamar a Reci" → POST al backend, animación de loading
-- [ ] **Paula** · historial personal de reciclajes con paginación
-- [ ] **Paula** · pantalla de cupones y canje con confirmación
+- [x] **Paula** · mapa del campus con Leaflet (o Mapbox) + 2–3 puntos fijos
+- [x] **Paula** · posición de Reci en tiempo real via Supabase Realtime
+- [x] **Paula** · botón "Llamar a Reci" → POST al backend, animación de loading
+- [x] **Paula** · historial personal de reciclajes con paginación
+- [x] **Paula** · pantalla de cupones y canje con confirmación
 - [ ] **Paula** · UI del opt-in facial + subida de foto + revocación de consentimiento
-- [ ] **Paula** · PWA: `manifest.webmanifest`, service worker, instalable en home screen
+- [x] **Paula** · PWA: `manifest.webmanifest` + iconos (192/512/maskable) — falta service worker
 - [ ] **Paula** · Push notifications (Web Push API + worker)
 
 ### Fase 7 — Integración end-to-end · semanas 12–14
@@ -236,13 +241,12 @@ Endpoints REST mínimos (Next.js Route Handlers en `web/src/app/api/`):
 
 ---
 
-## Próximos pasos inmediatos (semana 1)
+## Próximos pasos inmediatos
 
 Por orden:
 
-1. **Paula** — crear el proyecto Supabase y meter el schema v1 como migraciones SQL.
-2. **Paula** — instalar `@supabase/supabase-js`, generar tipos y armar el cliente en `web/src/lib/supabase/`.
-3. **Paula** — Auth con magic link funcionando + página `/app` protegida.
-4. **Leonela + Andrea** — pedir el hardware al proveedor.
-5. **Axel** — empezar la captura del dataset (mínimo 200 fotos en semana 1 para no llegar tarde a la fase 3).
-6. **Equipo** — primer stand-up: lunes 09:00, 15 min, definir puntos fijos del campus.
+1. **Paula** — service worker para que la PWA sea instalable/offline (último punto abierto de Fase 6 técnica).
+2. **Paula** — UI del opt-in facial (subida de foto + revocación de consentimiento).
+3. **Paula** — Push notifications (Web Push API + worker), hoy marcado "soon" en `/app/ajustes`.
+4. **Axel** — captura del dataset propio y transfer learning de MobileNet v2 (Fase 3), sigue siendo el bloqueante más grande para tener el robot completo end-to-end.
+5. **Leonela + Andrea** — ensamble físico siguiendo `docs/CONEXIONES.md` (Fase 2 → Fase 4).

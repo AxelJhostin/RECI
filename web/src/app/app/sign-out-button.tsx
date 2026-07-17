@@ -15,9 +15,10 @@ export function SignOutButton() {
   return (
     <button
       onClick={handleSignOut}
-      className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
+      className="text-[13px] font-semibold transition-colors"
+      style={{ color: 'var(--flame)' }}
     >
-      Salir
+      Cerrar sesión
     </button>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Database } from '@/lib/supabase/types'
+import { Icon } from '@/components/icon'
 
 type RobotPoint = Pick<
   Database['public']['Tables']['robot_points']['Row'],
@@ -58,7 +59,7 @@ export function CallForm({
 
   if (points.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-sm text-zinc-500">
+      <div className="rounded-[20px] border border-dashed p-6 text-[14px]" style={{ borderColor: 'var(--line)', background: 'var(--card)', color: 'var(--ink-faint)' }}>
         Todavía no hay puntos del campus configurados.
       </div>
     )
@@ -67,57 +68,69 @@ export function CallForm({
   return (
     <div className="space-y-6">
       {pending ? (
-        <div className="rounded-2xl bg-emerald-500 p-5 text-white">
-          <p className="text-sm font-medium opacity-80">Reci está en camino 🚀</p>
-          <p className="mt-1 text-lg font-bold">
-            {pendingPoint?.name ?? 'Punto del campus'}
-          </p>
-          <p className="text-sm opacity-70">
-            Solicitado a las{' '}
-            {new Date(pending.created_at).toLocaleTimeString('es-EC', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </p>
+        <div className="flex items-center gap-3.5 rounded-[22px] p-5 text-white" style={{ background: 'linear-gradient(165deg, var(--green) 0%, var(--green-deep) 100%)' }}>
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px]" style={{ background: 'rgba(255,255,255,.18)' }}>
+            <Icon name="pin" size={26} stroke="#fff" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[12.5px] font-semibold opacity-80">Reci está en camino 🚀</p>
+            <p className="truncate text-[18px] font-extrabold">{pendingPoint?.name ?? 'Punto del campus'}</p>
+            <p className="text-[12.5px] opacity-70">
+              Solicitado a las{' '}
+              {new Date(pending.created_at).toLocaleTimeString('es-EC', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          </div>
         </div>
       ) : null}
 
-      <fieldset className="space-y-2" disabled={loading}>
-        <legend className="mb-2 text-sm font-medium text-zinc-700">
+      <fieldset className="space-y-2.5" disabled={loading}>
+        <legend className="mb-2 text-[13px] font-bold" style={{ color: 'var(--ink-soft)' }}>
           {pending ? 'Cambiar a otro punto' : 'Punto de recogida'}
         </legend>
 
-        {points.map((p) => (
-          <label
-            key={p.id}
-            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
-              selected === p.id
-                ? 'border-emerald-400 bg-emerald-50'
-                : 'border-zinc-200 bg-white hover:border-emerald-200'
-            }`}
-          >
-            <input
-              type="radio"
-              name="point"
-              value={p.id}
-              checked={selected === p.id}
-              onChange={() => setSelected(p.id)}
-              className="mt-1 accent-emerald-500"
-            />
-            <span>
-              <span className="block text-sm font-semibold text-zinc-900">
-                {p.name}
+        {points.map((p) => {
+          const on = selected === p.id
+          return (
+            <label
+              key={p.id}
+              className="flex cursor-pointer items-center gap-3.5 rounded-[18px] border p-4 transition-colors"
+              style={{
+                background: on ? 'var(--green-50)' : 'var(--card)',
+                borderColor: on ? 'var(--green)' : 'var(--line)',
+              }}
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px]" style={{ background: on ? 'var(--green-100)' : 'var(--paper)' }}>
+                <Icon name="pin" size={22} stroke={on ? 'var(--green)' : 'var(--ink-faint)'} />
               </span>
-              {p.notes ? (
-                <span className="block text-xs text-zinc-400">{p.notes}</span>
-              ) : null}
-            </span>
-          </label>
-        ))}
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-bold" style={{ color: 'var(--ink)' }}>
+                  {p.name}
+                </span>
+                {p.notes ? (
+                  <span className="block text-[12.5px]" style={{ color: 'var(--ink-faint)' }}>
+                    {p.notes}
+                  </span>
+                ) : null}
+              </span>
+              <input
+                type="radio"
+                name="point"
+                value={p.id}
+                checked={on}
+                onChange={() => setSelected(p.id)}
+                className="h-5 w-5 shrink-0"
+                style={{ accentColor: 'var(--green)' }}
+              />
+            </label>
+          )
+        })}
       </fieldset>
 
       {error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p className="rounded-[12px] px-3 py-2 text-[13px] font-medium" style={{ background: 'oklch(0.95 0.04 25)', color: 'var(--flame)' }}>
           {error}
         </p>
       ) : null}
@@ -125,13 +138,11 @@ export function CallForm({
       <button
         onClick={handleCall}
         disabled={loading || !selected}
-        className="w-full rounded-xl bg-emerald-600 py-3 font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2.5 rounded-[18px] py-[17px] text-[16px] font-bold text-white transition-opacity disabled:opacity-50"
+        style={{ background: 'var(--green)', boxShadow: '0 8px 20px -8px var(--green)' }}
       >
-        {loading
-          ? 'Llamando…'
-          : pending
-            ? 'Actualizar punto'
-            : 'Llamar a Reci'}
+        <Icon name="call" size={20} stroke="#fff" />
+        {loading ? 'Llamando…' : pending ? 'Actualizar punto' : 'Llamar a Reci aquí'}
       </button>
     </div>
   )

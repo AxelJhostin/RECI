@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Database } from '@/lib/supabase/types'
+import { Icon } from '@/components/icon'
 
 type Coupon = Pick<
   Database['public']['Tables']['coupons']['Row'],
@@ -60,28 +61,30 @@ export function CouponList({
 
   if (coupons.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">
+      <div className="rounded-[20px] border border-dashed p-6 text-center text-[14px]" style={{ borderColor: 'var(--line)', background: 'var(--card)', color: 'var(--ink-faint)' }}>
         No hay cupones disponibles por ahora.
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       {success ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-          <p className="text-sm font-semibold text-emerald-700">
+        <div className="rounded-[20px] border p-5" style={{ borderColor: 'var(--green-100)', background: 'var(--green-50)' }}>
+          <p className="text-[14px] font-bold" style={{ color: 'var(--green-deep)' }}>
             ¡Canjeaste {success.coupon_title}! 🎉
           </p>
-          <p className="mt-2 text-xs text-emerald-600">Tu código:</p>
-          <p className="mt-1 font-mono text-lg font-bold tracking-widest text-emerald-800">
+          <p className="mt-2 text-[12px]" style={{ color: 'var(--green)' }}>Tu código:</p>
+          <p className="mt-1 font-mono text-[18px] font-bold tracking-widest" style={{ color: 'var(--green-deep)' }}>
             {success.code}
           </p>
         </div>
       ) : null}
 
       {error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+        <p className="rounded-[12px] px-3 py-2 text-[13px] font-medium" style={{ background: 'oklch(0.95 0.04 25)', color: 'var(--flame)' }}>
+          {error}
+        </p>
       ) : null}
 
       <ul className="space-y-3">
@@ -94,34 +97,39 @@ export function CouponList({
           return (
             <li
               key={c.id}
-              className="rounded-xl border border-zinc-200 bg-white p-4"
+              className="flex items-center gap-3.5 rounded-[20px] border p-4"
+              style={{ background: 'var(--card)', borderColor: 'var(--line)', opacity: available ? 1 : 0.62 }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-zinc-900">{c.title}</p>
-                  {c.description ? (
-                    <p className="mt-0.5 text-sm text-zinc-500">{c.description}</p>
-                  ) : null}
-                  <p className="mt-1 text-xs text-zinc-400">
-                    {available ? `${stock} disponibles` : 'Agotado'}
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-sm font-semibold text-zinc-700">
-                  {c.cost_points} pts
-                </span>
+              <span className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-[16px]" style={{ background: 'var(--gold-50)' }}>
+                <Icon name="ticket" size={26} stroke="var(--gold)" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15.5px] font-extrabold tracking-tight">{c.title}</p>
+                {c.description ? (
+                  <p className="text-[12.5px]" style={{ color: 'var(--ink-faint)' }}>{c.description}</p>
+                ) : null}
+                <p className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] font-extrabold" style={{ color: 'var(--gold)' }}>
+                  <Icon name="leaf" size={14} stroke="var(--gold)" /> {c.cost_points} pts
+                  <span className="font-semibold" style={{ color: 'var(--ink-faint)' }}>
+                    · {available ? `${stock} disp.` : 'agotado'}
+                  </span>
+                </p>
               </div>
-
               <button
                 onClick={() => handleRedeem(c)}
                 disabled={disabled}
-                className="mt-3 w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="shrink-0 rounded-[13px] px-[15px] py-2.5 text-[13.5px] font-extrabold transition-opacity disabled:cursor-not-allowed"
+                style={{
+                  background: affordable && available ? 'var(--green)' : 'var(--paper)',
+                  color: affordable && available ? '#fff' : 'var(--ink-faint)',
+                }}
               >
                 {redeemingId === c.id
-                  ? 'Canjeando…'
+                  ? '…'
                   : !available
                     ? 'Agotado'
                     : !affordable
-                      ? `Te faltan ${c.cost_points - points} pts`
+                      ? `Faltan ${c.cost_points - points}`
                       : 'Canjear'}
               </button>
             </li>

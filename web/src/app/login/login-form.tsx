@@ -1,53 +1,109 @@
 'use client'
 
-import { useActionState } from 'react'
-import { sendMagicLink } from './actions'
+import { useActionState, useState } from 'react'
+import { signIn, signUp } from './actions'
+
+type State = { message: string } | null
 
 export function LoginForm() {
-  const [state, action, pending] = useActionState(sendMagicLink, null)
+  const [mode, setMode] = useState<'signup' | 'signin'>('signup')
 
-  if (state?.success) {
-    return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-        <div className="text-3xl mb-3">📬</div>
-        <p className="font-medium text-emerald-800">{state.message}</p>
-        <p className="text-sm text-emerald-600 mt-2">
-          Haz clic en el enlace del correo para continuar.
-        </p>
-      </div>
-    )
-  }
+  const [state, action, pending] = useActionState<State, FormData>(
+    async (prev, formData) =>
+      formData.get('mode') === 'signup' ? signUp(prev, formData) : signIn(prev, formData),
+    null,
+  )
+
+  const isSignup = mode === 'signup'
+
+  const inputClass =
+    'w-full rounded-[14px] border px-4 py-3 text-[15px] outline-none transition focus:border-[var(--green)]'
+  const inputStyle = { background: 'var(--paper)', borderColor: 'var(--line)', color: 'var(--ink)' }
 
   return (
-    <form action={action} className="space-y-4">
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1.5">
-          Correo institucional
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder="tu.nombre@puce.edu.ec"
-          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
-        />
+    <div>
+      {/* toggle */}
+      <div className="mb-5 flex rounded-[14px] p-1" style={{ background: 'var(--paper)' }}>
+        {(['signup', 'signin'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className="flex-1 rounded-[11px] py-2.5 text-[14px] font-bold transition-colors"
+            style={{
+              background: mode === m ? 'var(--card)' : 'transparent',
+              color: mode === m ? 'var(--ink)' : 'var(--ink-faint)',
+              boxShadow: mode === m ? 'var(--shadow-card)' : 'none',
+            }}
+          >
+            {m === 'signup' ? 'Crear cuenta' : 'Iniciar sesión'}
+          </button>
+        ))}
       </div>
 
-      {state?.message && !state.success && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2.5 border border-red-200">
-          {state.message}
-        </p>
-      )}
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="mode" value={mode} />
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
-      >
-        {pending ? 'Enviando enlace...' : 'Enviar enlace de acceso'}
-      </button>
-    </form>
+        {isSignup && (
+          <div>
+            <label htmlFor="name" className="mb-1.5 block text-[13px] font-semibold" style={{ color: 'var(--ink-soft)' }}>
+              Nombre
+            </label>
+            <input id="name" name="name" type="text" autoComplete="name" required placeholder="Tu nombre" className={inputClass} style={inputStyle} />
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="email" className="mb-1.5 block text-[13px] font-semibold" style={{ color: 'var(--ink-soft)' }}>
+            Correo
+          </label>
+          <input id="email" name="email" type="email" autoComplete="email" required placeholder="tu@correo.com" className={inputClass} style={inputStyle} />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="mb-1.5 block text-[13px] font-semibold" style={{ color: 'var(--ink-soft)' }}>
+            Contraseña
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete={isSignup ? 'new-password' : 'current-password'}
+            required
+            minLength={6}
+            placeholder={isSignup ? 'Mínimo 6 caracteres' : 'Tu contraseña'}
+            className={inputClass}
+            style={inputStyle}
+          />
+        </div>
+
+        {state?.message && (
+          <p className="rounded-[12px] px-3 py-2.5 text-[13px] font-medium" style={{ background: 'oklch(0.95 0.04 25)', color: 'var(--flame)' }}>
+            {state.message}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="!mt-5 w-full rounded-[16px] py-[15px] text-[16px] font-bold text-white transition-opacity disabled:opacity-60"
+          style={{ background: 'var(--green)', boxShadow: '0 8px 20px -8px var(--green)' }}
+        >
+          {pending ? 'Un momento…' : isSignup ? 'Empezar a reciclar' : 'Entrar'}
+        </button>
+      </form>
+
+      <p className="mt-4 text-center text-[13px]" style={{ color: 'var(--ink-faint)' }}>
+        {isSignup ? '¿Ya tienes cuenta? ' : '¿Aún no tienes cuenta? '}
+        <button
+          type="button"
+          onClick={() => setMode(isSignup ? 'signin' : 'signup')}
+          className="font-bold"
+          style={{ color: 'var(--green)' }}
+        >
+          {isSignup ? 'Inicia sesión' : 'Crea una'}
+        </button>
+      </p>
+    </div>
   )
 }

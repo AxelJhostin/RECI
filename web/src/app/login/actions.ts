@@ -1,32 +1,76 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { headers } from 'next/headers'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
-type State = { message: string; success: boolean } | null
+type State = { message: string } | null
 
-export async function sendMagicLink(_: State, formData: FormData): Promise<State> {
-  const email = formData.get('email')?.toString().trim().toLowerCase()
+function readCredentials(formData: FormData) {
+  const email = formData.get('email')?.toString().trim().toLowerCase() ?? ''
+  const password = formData.get('password')?.toString() ?? ''
+  const name = formData.get('name')?.toString().trim() ?? ''
+  return { email, password, name }
+}
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { success: false, message: 'Ingresa un correo válido.' }
+// Iniciar sesión con correo + contraseña.
+export async function signIn(_: State, formData: FormData): Promise<State> {
+  const { email, password } = readCredentials(formData)
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { message: 'Ingresa un correo válido.' }
+  }
+  if (!password) {
+    return { message: 'Ingresa tu contraseña.' }
   }
 
   const supabase = await createClient()
-  const headersList = await headers()
-  const origin = headersList.get('origin') ?? 'http://localhost:3000'
-
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-    },
-  })
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
-    console.error('Magic link error:', error.message)
-    return { success: false, message: 'No pudimos enviar el enlace. Intenta de nuevo.' }
+    return { message: 'Correo o contraseña incorrectos.' }
   }
 
-  return { success: true, message: `Enlace enviado a ${email}. Revisa tu bandeja de entrada.` }
+  redirect('/app')
+}
+
+// Crear cuenta con correo + contraseña (sin enlace por correo).
+export async function signUp(_: State, formData: FormData): Promise<State> {
+  const { email, password, name } = readCredentials(formData)
+
+  if (!name) {
+    return { message: 'Ingresa tu nombre.' }
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { message: 'Ingresa un correo válido.' }
+  }
+  if (password.length < 6) {
+    return { message: 'La contraseña debe tener al menos 6 caracteres.' }
+  }
+
+  // Creamos el usuario ya confirmado con la Admin API (service role). Así el
+  // registro es instantáneo, sin pasar por la confirmación por correo.
+  const admin = createServiceClient()
+  const { error: createError } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: name, display_name: name },
+  })
+
+  if (createError) {
+    const msg = createError.message.toLowerCase()
+    if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+      return { message: 'Ese correo ya tiene una cuenta. Inicia sesión.' }
+    }
+    return { message: 'No pudimos crear la cuenta. Intenta de nuevo.' }
+  }
+
+  // Iniciamos sesión de inmediato para dejar la sesión activa (cookies).
+  const supabase = await createClient()
+  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+  if (signInError) {
+    return { message: 'Cuenta creada. Ahora inicia sesión.' }
+  }
+
+  redirect('/app')
 }
