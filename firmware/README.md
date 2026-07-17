@@ -36,8 +36,57 @@ CMD:<accion>:<parametro>\n
 Ejemplos:
 - `CMD:OPEN:vidrio\n` — abrir compuerta de vidrio
 - `CMD:OPEN:plastico\n` — abrir compuerta de plástico
-- `CMD:OLED:Clasificando...\n` — mostrar mensaje en pantalla
+- `CMD:OLED:Clasificando...\n` — mostrar mensaje de texto en pantalla
+- `CMD:FACE:happy\n` — cambiar la cara de Reci
 - `CMD:STOP\n` — detener motores
+
+### La cara de Reci (`CMD:FACE:<estado>`)
+
+Implementada en [`arduino-mega/Display.h`](arduino-mega/Display.h) + `Display.cpp`.
+Es la misma cara que la mascota de la app (`web/src/components/reci-mascot.tsx`),
+rediseñada para 1 bit: el OLED es monocromo, no hay glow ni degradados.
+
+| estado | cuándo | cara |
+| --- | --- | --- |
+| `idle` | esperando | ojos redondos + sonrisa, parpadea solo |
+| `moving` | yendo a un punto | ojos entrecerrados, concentrado |
+| `thinking` | esperando al cloud | mirando arriba + puntitos animados |
+| `happy` | llegó / clasificó bien | ojos `^^` + sonrisota |
+| `confused` | material desconocido | ojos redondos + boca `o` |
+| `sleep` | cargando | ojos cerrados + zZz |
+
+La cara está dibujada con primitivas de Adafruit_GFX, no con un bitmap: así
+parpadea, se anima y ocupa flash en vez de 1KB de RAM.
+
+**Dos cosas que no se pueden ignorar:**
+
+1. `pantalla.tick()` va en **cada** vuelta del `loop()`. Ahí viven el parpadeo y
+   las animaciones. Es barato: solo habla por I2C cuando algo cambió.
+2. El bus I2C va a **400kHz** (`Wire.setClock(400000)`, ya está en `begin()`).
+   A los 100kHz por defecto, cada refresco del OLED bloquea el bus ~90ms — con
+   eso el robot deja de leer los ultrasonidos a tiempo y se lleva por delante el
+   criterio de aceptación #9 (frenar a ≤20cm).
+
+```cpp
+#include "Display.h"
+
+ReciDisplay pantalla;
+
+void setup() {
+  Serial1.begin(9600);           // ESP32-CAM
+  if (!pantalla.begin()) {
+    // el OLED no contesta en 0x3C — revisa SDA/SCL y el 5V
+  }
+  pantalla.setFace(FACE_IDLE);
+}
+
+void loop() {
+  pantalla.tick();               // siempre, en cada vuelta
+  leerUltrasonidos();
+  moverMotores();
+  // ... y al parsear CMD:FACE:happy → pantalla.setFace(FACE_HAPPY);
+}
+```
 
 ## Energía
 
@@ -51,4 +100,10 @@ Leonela Sornoza, Andrea Campaña (apoyo: Axel Hernández).
 
 ## Estado
 
-Pendiente — se inicia en la **Fase 2** del cronograma (semanas 3–4).
+Fase 2 pendiente (semanas 3–4), con un adelanto:
+
+- ✅ `arduino-mega/Display.h` + `Display.cpp` — la cara de Reci en el OLED.
+  Escrita y con chequeo sintáctico, pero **sin probar en hardware**: el OLED
+  todavía está en el carrito. Hay que verificarla contra la pantalla real.
+- ⏳ El resto (`Motors.h`, `Servos.h`, `Ultrasonic.h`, sketch principal) arranca
+  con el ensamble físico, siguiendo [`docs/CONEXIONES.md`](../docs/CONEXIONES.md).
