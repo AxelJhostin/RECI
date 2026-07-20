@@ -89,6 +89,13 @@ cada foto. No corrige nada — solo te dice si la cámara + el prompt están
 entendiendo bien el objeto real, para decidir si vale la pena avanzar con
 esa cámara antes de invertir tiempo en la integración de hardware.
 
+`tests/fotos_dificiles/` trae casos reales que ya fallaron en `dev/RECI` —
+por ejemplo `gatorade_vidrio_473ml.jpeg` (TM 99.8% "plastico" y Claude Sonnet
+leyó la tapa como `rosca_plastico` en una foto nítida y bien iluminada, ver
+`dev/RECI/docs/BATERIA_B1.md` #14). Corre `probar_fotos.py
+tests/fotos_dificiles/` para confirmar si el mismo prompt/reglas (copiados
+tal cual en este servicio) siguen fallando aquí con ese objeto.
+
 ## Tests
 
 ```bash
