@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { ok, err, requireRobotAuth, createServiceClient } from '@/lib/api'
-import type { MaterialType } from '@/lib/supabase/types'
+import { classifyMaterial, type VisionClassifyResult } from '@/lib/vision/service'
 
 // POST /api/vision/classify
 // Llamado por el ESP32-CAM con la imagen del residuo.
@@ -25,12 +25,7 @@ export async function POST(request: NextRequest) {
 
   if (image.size > 2 * 1024 * 1024) return err('La imagen no puede superar 2 MB', 413)
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // STUB DE CLASIFICACIÓN
-  // Axel reemplaza este bloque en la Fase 3 con el modelo real (TF.js / ONNX).
-  // ─────────────────────────────────────────────────────────────────────────
   const result = await classifyImage(image)
-  // ─────────────────────────────────────────────────────────────────────────
 
   // Registrar el evento en la base de datos
   if (result.material !== 'desconocido') {
@@ -46,17 +41,23 @@ export async function POST(request: NextRequest) {
   return ok(result)
 }
 
-// ─── Stub del clasificador ────────────────────────────────────────────────────
-// TODO (Axel, Fase 3): reemplazar con inferencia real del modelo MobileNet v2.
-async function classifyImage(_image: File): Promise<{
-  material: MaterialType
-  confidence: number
-  rule_applied: string
-}> {
-  // Placeholder: devuelve desconocido hasta que se integre el modelo.
-  return {
-    material: 'desconocido',
-    confidence: 0,
-    rule_applied: 'stub — modelo no integrado aún',
+// ─── Clasificador ────────────────────────────────────────────────────────
+// Llama a ia/vision-service: Claude/Gemini + heurísticas OpenCV + sistema
+// experto (174 reglas, portado de dev/RECI). Ver
+// docs/DECISION-SERVICIO-VISION.md.
+async function classifyImage(image: File): Promise<VisionClassifyResult> {
+  try {
+    return await classifyMaterial(image)
+  } catch (error) {
+    // Si el servicio de visión no responde, se rechaza en vez de adivinar —
+    // misma política conservadora que el sistema experto (más vale un
+    // "material no permitido" que abrir la compuerta equivocada).
+    const detail = error instanceof Error ? error.message : 'error desconocido'
+    console.error('vision classify:', detail)
+    return {
+      material: 'desconocido',
+      confidence: 0,
+      rule_applied: `servicio de visión no disponible — ${detail}`,
+    }
   }
 }

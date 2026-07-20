@@ -202,6 +202,63 @@ POST /api/events/recycle         → registrar el reciclaje y dar puntos
 
 ---
 
+## 5 · ¿Qué muestro en la LCD?
+
+```
+GET /api/robot/display
+GET /api/robot/display?profile_id=<uuid>
+```
+
+Usa la misma cabecera `Authorization: Bearer <ROBOT_API_KEY>`. La primera ruta
+devuelve el saludo inicial y el top 3 de personas con más puntos. El ESP32-CAM
+rota esas entradas en la LCD y manda al Mega una orden como:
+
+```
+CMD:LCD:Top recicladores|1. Paula 1200
+```
+
+Cuando el reconocimiento facial ya identificó a una persona y tiene el `id` de
+su perfil, consulta la segunda variante. La respuesta trae dos líneas listas
+para mostrar, por ejemplo:
+
+```json
+{ "mode": "greeting", "lines": ["Bienvenido,", "Paula"] }
+```
+
+El Mega no consulta Supabase ni conoce credenciales: solo recibe `CMD:LCD` por
+Serial2. Si no hay identificación facial, muestra el saludo genérico.
+
+---
+
+## 6 · ¿Quién está frente a Reci? (facial opt-in)
+
+```
+POST /api/face/recognize
+Authorization: Bearer <ROBOT_API_KEY>
+Content-Type: multipart/form-data
+```
+
+El ESP32-CAM manda la foto en el campo `image` (JPEG, PNG o WebP; máximo 2 MB).
+La API solo considera perfiles que aceptaron el reconocimiento facial y nunca
+devuelve embeddings ni guarda la foto enviada. Si encuentra una coincidencia
+por encima del umbral configurado:
+
+```json
+{
+  "matched": true,
+  "profile_id": "8f14e45f-ceea-467a-9c1e-3a0f8b2d4c11",
+  "display_name": "Paula",
+  "confidence": 0.9342
+}
+```
+
+El ESP32-CAM usa `profile_id` para pedir el saludo a `GET /api/robot/display` y
+manda las dos líneas resultantes al Mega con `CMD:LCD`. Si responde
+`{"matched": false}`, muestra el saludo genérico y no intenta identificar a
+otra persona hasta la siguiente interacción.
+
+---
+
 ## Esqueleto del loop (pseudocódigo)
 
 ```cpp

@@ -281,18 +281,27 @@ export interface Database {
       face_embeddings: {
         Row: {
           user_id: string
-          storage_path: string
+          storage_path: string | null
           consent_signed_at: string
+          embedding_ciphertext: string | null
+          model: string | null
+          embedding_version: number
         }
         Insert: {
           user_id: string
-          storage_path: string
+          storage_path?: string | null
           consent_signed_at?: string
+          embedding_ciphertext?: string | null
+          model?: string | null
+          embedding_version?: number
         }
         Update: {
           user_id?: string
-          storage_path?: string
+          storage_path?: string | null
           consent_signed_at?: string
+          embedding_ciphertext?: string | null
+          model?: string | null
+          embedding_version?: number
         }
         Relationships: []
       }

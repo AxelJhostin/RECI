@@ -6,7 +6,7 @@ Plataforma móvil de dos compartimentos (vidrio / plástico) que se desplaza ent
 
 ## Subsistemas
 
-- **Reci físico** — plataforma rodante con Raspberry Pi 4 + ESP32, cámara, servos, OLED, LEDs, audio.
+- **Reci físico** — plataforma rodante con Arduino Mega 2560 + ESP32-CAM, servos, OLED, LEDs, audio.
 - **Reci cloud** — backend en Supabase + Next.js API routes (PostgreSQL, Auth, Realtime, Storage).
 - **Reci app** — PWA en Next.js + Tailwind: mapa del campus, llamar al robot, historial, cupones.
 
@@ -26,7 +26,7 @@ Reci/
 ├── docs/        # Acta de constitución y documentación del proyecto
 ├── web/         # Reci App (PWA) + Reci Cloud (Next.js API routes + Supabase) + Dashboard admin
 ├── firmware/    # Código ESP32 (motores, servos, sensores, LEDs, audio) — PlatformIO
-└── ia/          # Código Raspberry Pi (visión, MobileNet v2, sistema experto, UART, cloud)
+└── ia/          # Servicio de visión en la nube (Claude/Gemini + sistema experto) — ver ia/vision-service/
 ```
 
 Cada subcarpeta tiene su propio `README.md` con stack y responsables.

@@ -1,7 +1,7 @@
 # Reci — Plan maestro
 
 > Documento vivo. Se actualiza cada vez que cerramos una fase o cambiamos una decisión.
-> Última actualización: 2026-07-01 · Fase 6 en curso.
+> Última actualización: 2026-07-19 · Fase 6 en curso, Fase 3 desbloqueada.
 
 Este documento responde a tres preguntas en orden:
 
@@ -31,12 +31,13 @@ Si buscas el alcance, los criterios de aceptación o los riesgos, eso vive en [`
 - ✅ Las 5 pantallas de la app (home/mapa, llamar, historial, cupones, ajustes) conectadas a las API routes.
 - ✅ Rediseño visual: tipografía Poppins, paleta cream/ink, mascota de Reci (`web/src/components/reci-mascot.tsx`).
 - ✅ PWA instalable: `manifest.ts` + iconos generados dinámicamente con `next/og` (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png` con safe-zone para Android adaptive icons).
+- ✅ `ia/vision-service` implementado (FastAPI + Claude/Gemini + heurísticas OpenCV + sistema experto de 174 reglas portado de `dev/RECI`) y conectado a `/api/vision/classify` — reemplaza el stub. Ver [`DECISION-SERVICIO-VISION.md`](DECISION-SERVICIO-VISION.md). Probado localmente; falta desplegarlo y probarlo con la ESP32-CAM física.
 
 ### En curso
 
 - **Fase 5 completada** — backend y nube listos para integrarse con el hardware.
 - **Fase 6 en curso** — pantallas y rediseño visual listos, PWA instalable lista. Falta: service worker (offline) y push notifications (marcado "soon" en `/app/ajustes`).
-- Pendiente: modelo de visión (Fase 3).
+- **Fase 3 desbloqueada** — clasificación real disponible vía `ia/vision-service`; falta desplegarlo y validar con fotos de la ESP32-CAM real (ver Fase 3 en el roadmap).
 
 ### Bloqueado / pendiente de decidir
 
@@ -71,7 +72,7 @@ Las decisiones del acta dejaban algunos "A o B" abiertos. Esto es lo que cerramo
 | Hosting | **Vercel** para el front + Supabase Cloud para DB | Deploy automático desde main. Free tier alcanza para el piloto. |
 | **Cerebro del robot** | **Arduino Mega 2560** (era ESP32) | Más pines y memoria. Controla motores (2×L298N), servos (2×SG5010), sensores HC-SR04 y OLED. |
 | **Sistema de visión** | **ESP32-CAM + OV2640** (era Raspberry Pi 4) | Sin Raspberry Pi. La ESP32-CAM captura imagen y la envía al cloud via WiFi. La IA corre en el servidor, no en el robot. |
-| **Inferencia IA** | **Cloud (Next.js API route `/api/vision/classify`)** (era TF Lite local) | La ESP32-CAM no tiene capacidad de inferencia local. El modelo entrena en Colab y se despliega en Vercel. |
+| **Inferencia IA** | **Servicio Python aislado (`ia/vision-service`), llamado desde `/api/vision/classify`** (era "dentro del Route Handler de Next.js con TF.js/ONNX") | Mismo patrón que `face-service`. Reutiliza el sistema experto y la integración con Claude vision ya construidos y probados en `dev/RECI` (110/110 pruebas del SE, 39/39 capturas reales con Claude) en vez de esperar al dataset propio + conversión a TF.js/ONNX. Ver [`DECISION-SERVICIO-VISION.md`](DECISION-SERVICIO-VISION.md). El MobileNetV2 propio con fotos de la ESP32-CAM sigue el plan, pero como mejora dentro de ese mismo servicio, no como bloqueante del Flujo A. |
 | **Comunicación interna** | **UART Serial entre ESP32-CAM y Arduino Mega** (era UART Raspberry↔ESP32) | Protocolo `CMD:<accion>:<param>\n`. La ESP32-CAM recibe la decisión del cloud y la reenvía al Arduino. |
 | **Despacho de llamadas al robot** | **Polling HTTP cada 3s** (era "webhook o canal Realtime") | El webhook necesita que el robot sea alcanzable desde internet, y va a estar detrás del NAT del WiFi del campus sin IP pública. Realtime es WebSocket+TLS+protocolo Phoenix sobre un ESP32-CAM que ya tiene la RAM comida por el framebuffer de la cámara: frágil. Polling es aburrido, funciona detrás de NAT y para "ven a buscarme" 3s de latencia nadie los nota. Contrato en [`API-ROBOT.md`](API-ROBOT.md). |
 | **Posición del robot** | **Simbólica por punto, sin GPS** | No hay GPS en el BOM y Reci solo se mueve entre puntos fijos. Reporta `point_id` y el cloud resuelve lat/lng desde `robot_points`. Cero hardware nuevo y el mapa no cambia. Un NEO-6M daría 2–5m de error entre edificios y nada bajo techo: no vale la integración. |
@@ -112,12 +113,12 @@ Las 8 fases del acta, traducidas a entregables concretos y quién los hace. Las 
 
 **Objetivo:** clasificación vidrio/plástico ≥ 85% en condiciones del campus, corriendo en el cloud.
 
-- [ ] **Axel** · captura del dataset propio (≥ 500 imgs por clase) en el campus con ESP32-CAM
-- [ ] **Axel** · transfer learning de MobileNet v2 en Google Colab
-- [ ] **Axel** · exportar modelo a formato compatible con Vercel (TF.js SavedModel o ONNX)
-- [ ] **Axel** · integrar el modelo real en `web/src/app/api/vision/classify/route.ts` (reemplazar el stub)
-- [ ] **Axel** · sistema experto: reglas IF-THEN sobre la salida del modelo (umbral confianza, historial)
-- [ ] **Axel + Paula** · prueba end-to-end: ESP32-CAM → `POST /api/vision/classify` → respuesta JSON
+- [x] **`ia/vision-service` implementado** — FastAPI + Claude/Gemini + heurísticas OpenCV + sistema experto (174 reglas, portado de `dev/RECI`), probado localmente (auth, validación, manejo de errores, mapeo a `MaterialType`). Ver [`DECISION-SERVICIO-VISION.md`](DECISION-SERVICIO-VISION.md).
+- [x] **`web/src/app/api/vision/classify/route.ts`** — stub reemplazado, llama a `ia/vision-service` vía `web/src/lib/vision/service.ts` (mismo patrón que `face/service.ts`). Falla segura a `desconocido` si el servicio no responde.
+- [ ] **Axel/Andrea** · desplegar `ia/vision-service` en un host accesible desde Vercel y configurar `VISION_SERVICE_URL` / `VISION_SERVICE_API_KEY` en el panel de Vercel
+- [ ] **Axel + Paula** · prueba end-to-end: ESP32-CAM → `POST /api/vision/classify` → `ia/vision-service` → respuesta JSON, con fotos reales de la ESP32-CAM
+- [ ] **Axel** · recalibrar `visual_heuristics.py` con fotos reales de la ESP32-CAM (320×240) — los umbrales actuales vienen de fotos de mayor resolución en `dev/RECI`
+- [ ] **Axel** (mejora, no bloquea) · captura del dataset propio (≥ 500 imgs por clase) en el campus con ESP32-CAM, para entrenar un MobileNetV2 que corra como primer voto dentro de `vision-service` — optimización de costo/latencia sobre Claude/Gemini, no reemplazo
 
 ### Fase 4 — Integración Reci físico · semanas 6–8
 
@@ -230,11 +231,11 @@ Endpoints REST mínimos (Next.js Route Handlers en `web/src/app/api/`):
 
 ### IA · Axel
 
-- Modelo MobileNet v2 entrenado en Google Colab con dataset propio (campus PUCE Manabí).
-- Exportado a TF.js SavedModel o ONNX para correr en Vercel (serverless).
-- Integrado en `web/src/app/api/vision/classify/route.ts` (actualmente tiene un stub).
-- Sistema experto sobre la salida del modelo: umbrales de confianza, historial de sesión.
-- Sin procesamiento local en el robot — toda la inferencia ocurre en el cloud.
+- Servicio aislado `ia/vision-service` (FastAPI), llamado desde `web/src/app/api/vision/classify/route.ts` — mismo patrón que `ia/face-service`. Ver [`DECISION-SERVICIO-VISION.md`](DECISION-SERVICIO-VISION.md).
+- Clasificación con Claude/Gemini vision (9 atributos) + heurísticas OpenCV, portado y probado en `dev/RECI` (110/110 pruebas del sistema experto, 39/39 capturas reales).
+- Sistema experto de 174 reglas (CF MYCIN, meta-reglas, forward + backward chaining) sobre los atributos extraídos — no reglas IF-THEN simples sobre un solo umbral.
+- Pendiente (mejora, no bloqueante): MobileNet v2 propio entrenado con dataset de la ESP32-CAM, corriendo dentro de `vision-service` como primer voto (reduce costo/latencia de las llamadas a Claude/Gemini).
+- Sin procesamiento local en el robot — toda la inferencia ocurre en el cloud (la ESP32-CAM solo captura y envía).
 
 ---
 
@@ -264,5 +265,6 @@ Por orden:
 3. **Paula** — la app reacciona por Realtime a "Reci aceptó / llegó" en `/app/llamar`.
 4. **Andrea** — cliente HTTP en la ESP32-CAM contra [`API-ROBOT.md`](API-ROBOT.md); el contrato ya está cerrado, no hace falta esperar a la IA.
 5. **Paula** — service worker (PWA offline), opt-in facial y push notifications (cierre de Fase 6).
-6. **Axel** — captura del dataset propio y transfer learning de MobileNet v2 (Fase 3), sigue siendo el bloqueante más grande para el Flujo A.
-7. **Leonela + Andrea** — ensamble físico siguiendo `docs/CONEXIONES.md` (Fase 2 → Fase 4).
+6. **Axel/Andrea** — desplegar `ia/vision-service` en un host accesible desde Vercel y configurar `VISION_SERVICE_URL`/`VISION_SERVICE_API_KEY`; ya no bloquea al Flujo A (el servicio existe y está probado localmente, ver [`DECISION-SERVICIO-VISION.md`](DECISION-SERVICIO-VISION.md)), pero falta correrlo con fotos reales de la ESP32-CAM.
+7. **Axel** — captura del dataset propio con ESP32-CAM y transfer learning de MobileNet v2 (Fase 3), ahora es una mejora de costo/latencia dentro de `vision-service`, no el bloqueante del Flujo A.
+8. **Leonela + Andrea** — ensamble físico siguiendo `docs/CONEXIONES.md` (Fase 2 → Fase 4).

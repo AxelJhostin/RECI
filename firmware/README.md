@@ -24,7 +24,7 @@ Gestiona toda la lógica de bajo nivel:
 
 - **Arduino Mega**: C++ con framework Arduino (Arduino IDE o PlatformIO).
 - **ESP32-CAM**: C++ con framework Arduino + `HTTPClient` + `ArduinoJson`.
-- Comunicación interna: UART entre ESP32-CAM (TX/RX) y Arduino Mega (Serial1).
+- Comunicación interna: UART entre ESP32-CAM (TX/RX) y Arduino Mega (Serial2).
 - Comunicación externa: HTTPS desde ESP32-CAM → Reci Cloud.
 
 ## Protocolo UART interno (ESP32-CAM → Arduino Mega)
@@ -34,10 +34,11 @@ CMD:<accion>:<parametro>\n
 ```
 
 Ejemplos:
-- `CMD:OPEN:vidrio\n` — abrir compuerta de vidrio
-- `CMD:OPEN:plastico\n` — abrir compuerta de plástico
+- `CMD:CLASSIFY:vidrio\n` — clasificación confirmada: abrir compuerta de vidrio
+- `CMD:CLASSIFY:plastico\n` — clasificación confirmada: abrir compuerta de plástico
 - `CMD:OLED:Clasificando...\n` — mostrar mensaje de texto en pantalla
 - `CMD:FACE:happy\n` — cambiar la cara de Reci
+- `CMD:LCD:Hola, soy Reci|Recicla y gana\n` — actualizar las dos líneas de la LCD
 - `CMD:STOP\n` — detener motores
 
 ### La cara de Reci (`CMD:FACE:<estado>`)
@@ -73,7 +74,7 @@ parpadea, se anima y ocupa flash en vez de 1KB de RAM.
 ReciDisplay pantalla;
 
 void setup() {
-  Serial1.begin(9600);           // ESP32-CAM
+  Serial2.begin(9600);           // ESP32-CAM
   if (!pantalla.begin()) {
     // el OLED no contesta en 0x3C — revisa SDA/SCL y el 5V
   }
@@ -87,6 +88,31 @@ void loop() {
   // ... y al parsear CMD:FACE:happy → pantalla.setFace(FACE_HAPPY);
 }
 ```
+
+## Sketch principal actual
+
+[`arduino-mega/ReciMega.ino`](arduino-mega/ReciMega.ino) integra las compuertas
+y la OLED. Recibe las órdenes del ESP32-CAM por **Serial2** (Mega: RX2 = pin 17,
+TX2 = pin 16), no por Serial1: Serial1 queda reservado para el HC-05 según el
+mapa de conexiones actualizado.
+
+Una compuerta solo se abre ante una clasificación válida del sistema experto:
+
+```
+CMD:CLASSIFY:vidrio
+CMD:CLASSIFY:plastico
+```
+
+`vidrio` activa el servo de la compuerta izquierda (D3) y `plastico` el de la
+derecha (D4), durante 5 s. Cualquier otro valor, incluida una clasificación
+desconocida, no mueve ningún servo. Los motores quedan inicializados y detenidos
+hasta implementar la navegación.
+
+La LCD I2C 16x2 se usa para información conectada con la app: saludo inicial,
+saludo personalizado y ranking. Usa la dirección `0x27` por defecto y comparte
+SDA/SCL con la OLED y el MPU. Instala también la librería **LiquidCrystal I2C**
+desde el gestor de librerías de Arduino. Si el escáner I2C reporta otra dirección
+para la LCD, cambia `0x27` en `arduino-mega/LcdDisplay.h`.
 
 ## Energía
 

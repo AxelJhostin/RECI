@@ -1,46 +1,66 @@
 # Reci · IA + Sistema Experto
 
-Módulo de clasificación de residuos que corre **en el cloud** (Next.js API Route).
+Módulo de clasificación de residuos: `vidrio` | `plastico` | `desconocido`.
 
-La imagen viaja desde la ESP32-CAM al servidor, que ejecuta la inferencia y devuelve la decisión. No hay procesamiento local en el robot.
+Corre como **servicio aislado en contenedor** (`ia/vision-service/`), no
+dentro del Route Handler de Next.js. Ver
+[`docs/DECISION-SERVICIO-VISION.md`](../docs/DECISION-SERVICIO-VISION.md)
+para el porqué — mismo patrón que `ia/face-service/`.
 
 ## Flujo
 
 ```
 ESP32-CAM captura imagen
     ↓  POST /api/vision/classify  (multipart/form-data, campo "image")
-Servidor recibe imagen
+Next.js valida auth del robot (ROBOT_API_KEY) y reenvía la imagen
+    ↓  POST /v1/classify  (x-vision-service-key)
+ia/vision-service:
+    1. Claude o Gemini extrae 9 atributos visuales (objeto, transparencia,
+       color, forma, brillo, tapa, textura, rigidez, confianza)
+    2. Heurísticas OpenCV refinan los atributos (corrige lata/vidrio/metal
+       mal etiquetados)
+    3. Sistema experto (174 reglas, CF MYCIN, meta-reglas, forward +
+       backward chaining) decide la conclusión
     ↓
-Pipeline de clasificación (ver abajo)
-    ↓
-{ material: "vidrio"|"plastico"|"desconocido", confidence: 0.0–1.0 }
+{ material: "vidrio"|"plastico"|"desconocido", confidence, rule_applied }
     ↓  respuesta HTTP JSON
-ESP32-CAM reenvía decisión por UART → Arduino Mega
+Next.js registra el evento en Supabase (recycle_events) si no es "desconocido"
+    ↓
+ESP32-CAM reenvía la decisión por UART → Arduino Mega
 ```
 
-## Pipeline de clasificación (`src/app/api/vision/classify/`)
+## Código (`ia/vision-service/`)
 
-1. **Preprocesamiento**: resize a 224×224, normalización.
-2. **Modelo**: MobileNet v2 fine-tuned en dataset propio (vidrio / plástico / fondo).
-3. **Sistema experto**: reglas IF-THEN sobre la salida del modelo:
-   - Si `confidence < 0.65` → `desconocido`.
-   - Si la clase predicha y la segunda difieren menos de 0.10 → `desconocido`.
-   - Si el historial de los últimos 3 eventos del mismo punto coincide → boost de +0.05.
-4. **Respuesta**: `{ material, confidence, rule_applied }`.
+- `main.py` — endpoint FastAPI (`/v1/classify`), auth, mapeo de la conclusión
+  del sistema experto (5 categorías) al `MaterialType` de la app (3).
+- `vision/classifier.py` — llamada a Claude/Gemini + el prompt de
+  clasificación (afinado contra capturas reales del campus).
+- `vision/visual_heuristics.py` — heurísticas OpenCV, portadas sin cambios.
+- `expert_system/` — las 174 reglas, CF MYCIN, meta-reglas, backward
+  chaining, portadas sin cambios desde `dev/RECI`.
 
-## Stack
-
-- **Modelo**: TensorFlow.js (`@tensorflow/tfjs-node`) o ONNX Runtime (`onnxruntime-node`) — a confirmar con Axel según el entorno de entrenamiento.
-- **Entrenamiento**: Google Colab (exportar a SavedModel / ONNX).
-- **Dataset**: capturas propias del campus (≥ 500 imágenes por clase).
-- **Inferencia**: corre dentro del Route Handler de Next.js en Vercel (serverless).
+Ver [`ia/vision-service/README.md`](vision-service/README.md) para correrlo
+local, variables de entorno y qué se portó de `dev/RECI` vs. qué falta.
 
 ## Reconocimiento facial (opt-in)
 
-- El usuario sube su foto desde la app (`POST /api/face`).
-- La foto se almacena en Supabase Storage (`face-embeddings/`).
-- La ESP32-CAM envía una foto de la persona junto con el evento.
-- El servidor compara embeddings (FaceAPI.js o similar) y asocia el reciclaje al usuario.
+Servicio separado, ya implementado: [`ia/face-service/`](face-service/).
+Ver [`docs/DECISION-SERVICIO-FACIAL.md`](../docs/DECISION-SERVICIO-FACIAL.md).
+
+## Próximos pasos
+
+- **Dataset propio de la ESP32-CAM** (≥500 fotos/clase) para entrenar un
+  MobileNetV2 que corra como primer voto dentro de `vision-service` — mismo
+  patrón híbrido de `dev/RECI` (TM da contexto → Claude/Gemini decide), sin
+  depender de exportarlo a TF.js/ONNX ni de correrlo en Vercel.
+- Triple captura + voto mayoritario desde la ESP32-CAM (ver "Próximos
+  pasos" en `ia/vision-service/README.md`).
+- Recalibrar los umbrales de `visual_heuristics.py` con fotos reales de la
+  ESP32-CAM (320×240, `FRAMESIZE_QVGA`) — se afinaron con fotos de mayor
+  resolución en `dev/RECI`.
+- Desplegar `vision-service` en un host accesible desde Vercel (mismo
+  proveedor que se elija para `face-service`) y configurar
+  `VISION_SERVICE_URL` / `VISION_SERVICE_API_KEY` en el panel de Vercel.
 
 ## Responsables
 
@@ -48,5 +68,7 @@ Axel Hernández.
 
 ## Estado
 
-Pendiente — se inicia en la **Fase 3** del cronograma (semanas 4–6).  
-El endpoint `/api/vision/classify` existe con un stub; Axel integra el modelo real en Fase 3.
+`vision-service` implementado y probado localmente (auth, validación de
+imagen, manejo de errores del proveedor, mapeo del sistema experto). Falta:
+desplegarlo en un host real, configurar las variables en Vercel, y probar
+con fotos tomadas por la ESP32-CAM física (no solo con imágenes de prueba).
