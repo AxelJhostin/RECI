@@ -195,9 +195,16 @@ segundos durante 5 días son ~200.000 filas de basura.
 Mismo `Authorization: Bearer <ROBOT_API_KEY>`.
 
 ```
-POST /api/vision/classify        → clasificar la foto (Fase 3, hoy es un stub)
+POST /api/vision/classify        → clasificar UNA foto (ver ia/vision-service). La
+                                    ESP32-CAM la llama 3 veces por depósito con
+                                    "record_event": "false" y vota la mayoría local
+                                    (ver firmware/esp32-cam/ReciEsp32Cam.ino).
 POST /api/compartments/update    → {"id": "vidrio"|"plastico", "fill_percent": 0-100}
-POST /api/events/recycle         → registrar el reciclaje y dar puntos
+POST /api/events/recycle         → registrar UNA VEZ el resultado ya votado.
+                                    Si no hay user_id, la respuesta trae
+                                    "event.claim_code" — mándalo al Mega como
+                                    CMD:QR:<code> para que muestre el QR de
+                                    puntos (ver DECISION-QR-RECLAMO.md).
 ```
 
 ---

@@ -8,6 +8,13 @@
 // prácticamente nada de flash.
 
 static const int16_t SCREEN_W = 128;
+static const int16_t SCREEN_H = 64;
+
+// Versión 1 de QR (21x21 módulos) — hasta 25 caracteres alfanuméricos a
+// ECC_LOW, de sobra para un claim_code de 8. Cuanto más chica la versión,
+// más grande sale cada módulo en la pantalla de 128x64.
+static const uint8_t QR_VERSION = 1;
+static const uint8_t QR_SCALE = 2;
 
 static const int16_t EYE_W = 18;
 static const int16_t EYE_H = 26;
@@ -53,9 +60,10 @@ bool ReciDisplay::begin() {
 }
 
 void ReciDisplay::setFace(Face face) {
-  if (_face == face && !_showingMessage) return;
+  if (_face == face && !_showingMessage && !_showingQR) return;
   _face = face;
   _showingMessage = false;
+  _showingQR = false;
   _blinking = false;
   _dots = 0;
   scheduleBlink();
@@ -66,6 +74,15 @@ void ReciDisplay::setMessage(const char* msg) {
   strncpy(_message, msg, sizeof(_message) - 1);
   _message[sizeof(_message) - 1] = '\0';
   _showingMessage = true;
+  _showingQR = false;
+  _dirty = true;
+}
+
+void ReciDisplay::showClaimQR(const char* code) {
+  strncpy(_qrText, code, sizeof(_qrText) - 1);
+  _qrText[sizeof(_qrText) - 1] = '\0';
+  _showingQR = true;
+  _showingMessage = false;
   _dirty = true;
 }
 
@@ -197,10 +214,32 @@ void ReciDisplay::drawMouth() {
   }
 }
 
+// El buffer de qrcode_getBufferSize(QR_VERSION) vive en el stack de render()
+// vía esta función — para versión 1 son ~56 bytes, sin problema en el Mega.
+void ReciDisplay::drawQRCode() {
+  QRCode qrcode;
+  uint8_t qrcodeData[qrcode_getBufferSize(QR_VERSION)];
+  qrcode_initText(&qrcode, qrcodeData, QR_VERSION, ECC_LOW, _qrText);
+
+  const int16_t qrPixels = qrcode.size * QR_SCALE;
+  const int16_t x0 = (SCREEN_W - qrPixels) / 2;
+  const int16_t y0 = (SCREEN_H - qrPixels) / 2;
+
+  for (uint8_t y = 0; y < qrcode.size; y++) {
+    for (uint8_t x = 0; x < qrcode.size; x++) {
+      if (qrcode_getModule(&qrcode, x, y)) {
+        _oled.fillRect(x0 + x * QR_SCALE, y0 + y * QR_SCALE, QR_SCALE, QR_SCALE, SSD1306_WHITE);
+      }
+    }
+  }
+}
+
 void ReciDisplay::render() {
   _oled.clearDisplay();
 
-  if (_showingMessage) {
+  if (_showingQR) {
+    drawQRCode();
+  } else if (_showingMessage) {
     // Mensajes cortos en grande; los largos en chico y con salto de línea.
     const size_t len = strlen(_message);
     const uint8_t size = len <= 10 ? 2 : 1;

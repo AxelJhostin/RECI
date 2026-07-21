@@ -160,6 +160,22 @@ export default async function AppPage() {
           </div>
         </div>
 
+        {/* escanear QR — acción principal justo después de depositar */}
+        <Link
+          href="/app/escanear"
+          className="flex items-center gap-3.5 rounded-[20px] p-[17px] text-white transition-opacity"
+          style={{ background: 'linear-gradient(165deg, var(--green) 0%, var(--green-deep) 100%)', boxShadow: '0 8px 20px -8px var(--green)' }}
+        >
+          <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px]" style={{ background: 'rgba(255,255,255,.18)' }}>
+            <Icon name="scan" size={24} stroke="#fff" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[16px] font-extrabold">Escanear código de Reci</p>
+            <p className="text-[12.5px] opacity-80">¿Acabas de reciclar? Reclama tus puntos aquí</p>
+          </div>
+          <Icon name="chev" size={20} stroke="rgba(255,255,255,.85)" />
+        </Link>
+
         {/* accesos rápidos */}
         <div className="grid grid-cols-2 gap-3">
           {[

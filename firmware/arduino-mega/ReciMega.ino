@@ -20,6 +20,7 @@
 //   CMD:CLASSIFY:plastico
 //   CMD:FACE:idle|moving|thinking|happy|confused|sleep
 //   CMD:OLED:<mensaje corto>
+//   CMD:QR:<claim_code>   -- QR de reclamo de puntos (ver docs/DECISION-QR-RECLAMO.md)
 //
 // Las órdenes de clasificación distintas de vidrio/plastico no mueven servos.
 // ============================================================
@@ -148,6 +149,11 @@ void procesarComando(char* command) {
   if (empiezaCon(command, "CMD:OLED:")) {
     pantalla.setMessage(command + strlen("CMD:OLED:"));
     responder(F("OLED:ok"));
+    return;
+  }
+  if (empiezaCon(command, "CMD:QR:")) {
+    pantalla.showClaimQR(command + strlen("CMD:QR:"));
+    responder(F("QR:ok"));
     return;
   }
   if (empiezaCon(command, "CMD:LCD:")) {

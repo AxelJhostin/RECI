@@ -45,6 +45,9 @@ export interface Database {
           material: MaterialType
           confidence: number | null
           robot_point_id: string | null
+          claim_code: string | null
+          claim_expires_at: string | null
+          claimed_at: string | null
           created_at: string
         }
         Insert: {
@@ -53,6 +56,9 @@ export interface Database {
           material: MaterialType
           confidence?: number | null
           robot_point_id?: string | null
+          claim_code?: string | null
+          claim_expires_at?: string | null
+          claimed_at?: string | null
           created_at?: string
         }
         Update: {
@@ -61,6 +67,9 @@ export interface Database {
           material?: MaterialType
           confidence?: number | null
           robot_point_id?: string | null
+          claim_code?: string | null
+          claim_expires_at?: string | null
+          claimed_at?: string | null
           created_at?: string
         }
         Relationships: []

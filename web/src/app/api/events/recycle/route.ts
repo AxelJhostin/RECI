@@ -1,9 +1,15 @@
 import { type NextRequest } from 'next/server'
-import { ok, err, requireRobotAuth, createServiceClient } from '@/lib/api'
+import { ok, err, requireRobotAuth } from '@/lib/api'
+import { createRecycleEvent } from '@/lib/recycle/create-event'
 import type { MaterialType } from '@/lib/supabase/types'
 
 // POST /api/events/recycle
-// Llamado por la IA de la Raspberry Pi cuando clasifica un objeto
+// Registra UN reciclaje ya decidido. La ESP32-CAM llama a
+// /api/vision/classify con record_event=false por cada una de las 3 fotos
+// de la ráfaga (para no crear tres filas por un solo depósito), vota la
+// mayoría localmente, y llama aquí una sola vez con el resultado final.
+// Si no hay user_id, la respuesta trae claim_code para el QR de puntos —
+// ver docs/DECISION-QR-RECLAMO.md.
 // Body: { user_id?, material, confidence, robot_point_id? }
 export async function POST(request: NextRequest) {
   if (!requireRobotAuth(request)) return err('No autorizado', 401)
@@ -21,20 +27,15 @@ export async function POST(request: NextRequest) {
     return err('confidence debe ser un número entre 0 y 1', 400)
   }
 
-  const supabase = createServiceClient()
-  const { data, error } = await supabase
-    .from('recycle_events')
-    .insert({
-      user_id: (user_id as string) ?? null,
-      material: material as MaterialType,
-      confidence: (confidence as number) ?? null,
-      robot_point_id: (robot_point_id as string) ?? null,
-    })
-    .select('id, material, confidence, created_at')
-    .single()
+  const { data, error } = await createRecycleEvent({
+    userId: (user_id as string) ?? null,
+    material: material as MaterialType,
+    confidence: (confidence as number) ?? null,
+    robotPointId: (robot_point_id as string) ?? null,
+  })
 
   if (error) {
-    console.error('recycle event insert:', error.message)
+    console.error('recycle event insert:', error)
     return err('Error al registrar el evento', 500)
   }
 

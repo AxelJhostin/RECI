@@ -84,7 +84,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!best || best.similarity < MIN_SIMILARITY) return ok({ matched: false })
+  if (!best || best.similarity < MIN_SIMILARITY) {
+    return ok({
+      matched: false,
+      confidence: best ? Number(best.similarity.toFixed(4)) : null,
+    })
+  }
 
   return ok({
     matched: true,

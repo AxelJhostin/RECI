@@ -193,7 +193,7 @@ Schema mínimo v1 a crear en Supabase (Fase 5):
 | Tabla | Para qué | Campos clave |
 | --- | --- | --- |
 | `profiles` | Datos públicos del usuario (extiende `auth.users`) | `id (uuid)`, `display_name`, `avatar_url`, `facial_opt_in (bool)`, `created_at` |
-| `recycle_events` | Cada reciclaje registrado | `id`, `user_id`, `material (vidrio\|plastico\|desconocido)`, `confidence (numeric)`, `robot_point_id`, `created_at` |
+| `recycle_events` | Cada reciclaje registrado | `id`, `user_id`, `material (vidrio\|plastico\|desconocido)`, `confidence (numeric)`, `robot_point_id`, `claim_code`, `claim_expires_at`, `claimed_at`, `created_at` |
 | `points_ledger` | Puntos por evento (append-only para auditoría) | `id`, `user_id`, `delta`, `reason`, `event_id`, `created_at` |
 | `streaks` | Racha actual del usuario | `user_id`, `current_streak`, `longest_streak`, `last_recycle_at` |
 | `coupons` | Catálogo de cupones canjeables | `id`, `title`, `description`, `cost_points`, `stock`, `active` |
@@ -207,7 +207,8 @@ Schema mínimo v1 a crear en Supabase (Fase 5):
 
 Endpoints REST mínimos (Next.js Route Handlers en `web/src/app/api/`):
 
-- `POST /api/events/recycle` — IA notifica que clasificó algo.
+- `POST /api/events/recycle` — IA notifica que clasificó algo (genera `claim_code` si no hay `user_id`).
+- `POST /api/recycle/claim` — Usuario reclama puntos escaneando el QR del OLED (ver `DECISION-QR-RECLAMO.md`).
 - `POST /api/robot/position` — Robot publica su posición.
 - `GET /api/robot/current` — App pregunta dónde está Reci ahora.
 - `POST /api/calls` — App pide que Reci venga a un punto.
@@ -219,15 +220,14 @@ Endpoints REST mínimos (Next.js Route Handlers en `web/src/app/api/`):
 ### Firmware · Leonela + Andrea
 
 **Arduino Mega 2560** (C++ Arduino):
-- Modos: `manual` (testing serie) y `commanded` (recibe órdenes por UART desde ESP32-CAM).
-- Comandos UART: `CMD:OPEN:vidrio`, `CMD:OPEN:plastico`, `CMD:MOVE:forward`, `CMD:STOP`, `CMD:OLED:<texto>`.
-- Hardware abstrahido en libs: `Motors.h` (2×L298N), `Servos.h` (2×SG5010), `Ultrasonic.h` (HC-SR04), `Display.h` (OLED I2C).
+- Recibe por `Serial2` las órdenes ya decididas por la ESP32-CAM (`CMD:CLASSIFY:vidrio|plastico`, `CMD:FACE:<estado>`, `CMD:OLED:<texto>`, `CMD:LCD:<l1>|<l2>`, `CMD:QR:<claim_code>`) y abre solo la compuerta correspondiente 5s.
+- `Display.h`/`.cpp`: cara del OLED (SSD1306 128×64) con primitivas, no bitmaps — incluye `showClaimQR()` (librería `QRCode` de Richard Moore) para el flujo de reclamo de puntos, ver `DECISION-QR-RECLAMO.md`.
+- Motores/servos aún detenidos hasta integrar navegación segura.
 
-**ESP32-CAM** (C++ Arduino):
-- Captura imagen con OV2640.
-- Llama a `POST /api/vision/classify` vía WiFi y parsea la respuesta JSON.
-- Reenvía el resultado al Arduino Mega por Serial UART.
-- Llama periódicamente a `/api/robot/position` y `/api/compartments/update`.
+**ESP32-CAM** (C++ Arduino, AI Thinker):
+- Al recibir `C` por el Monitor Serial: toma 3 fotos con flash (`kFlashLedPin`), llama a `POST /api/vision/classify` por cada una (`record_event: false`) y vota mayoría localmente.
+- Registra el resultado final una sola vez con `POST /api/events/recycle`; si la respuesta trae `claim_code`, lo reenvía al Mega como `CMD:QR:<code>`.
+- Reconocimiento facial (saludo) es un flujo aparte, contra `/api/face/recognize` — ver `ia/face-service`.
 
 ### IA · Axel
 

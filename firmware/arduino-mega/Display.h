@@ -7,12 +7,14 @@
 // Librerías (Library Manager del Arduino IDE):
 //   - Adafruit SSD1306
 //   - Adafruit GFX Library
+//   - QRCode (de Richard Moore / ricmoo) — para showClaimQR()
 //
 // Uso:
 //   ReciDisplay pantalla;
 //   void setup() { pantalla.begin(); }
 //   void loop()  { pantalla.tick(); }   // <- en cada vuelta, siempre
 //   ... pantalla.setFace(FACE_HAPPY);
+//   ... pantalla.showClaimQR("A1B2C3D4");  // CMD:QR:<code> — reclamo de puntos
 //
 // ⚠️ tick() TIENE que llamarse en cada loop(): ahí viven el parpadeo y las
 // animaciones. Es barato — solo habla por I2C cuando algo cambió de verdad.
@@ -23,6 +25,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_SSD1306.h>
+#include <qrcode.h>
 
 // Los estados de ánimo de Reci, mapeados a lo que hace el robot.
 enum Face : uint8_t {
@@ -47,6 +50,11 @@ class ReciDisplay {
   // Para volver a la cara, llama setFace() otra vez.
   void setMessage(const char* msg);
 
+  // Muestra el QR de reclamo de puntos (esto es CMD:QR:<code>).
+  // code: el claim_code de recycle_events, hasta 15 caracteres.
+  // Para volver a la cara, llama setFace() otra vez.
+  void showClaimQR(const char* code);
+
   // Llamar en cada loop(). Solo redibuja si hace falta.
   void tick();
 
@@ -56,6 +64,8 @@ class ReciDisplay {
   Face _face = FACE_IDLE;
   bool _showingMessage = false;
   char _message[42] = {0};
+  bool _showingQR = false;
+  char _qrText[16] = {0};
 
   bool _dirty = true;         // hay algo nuevo que mandar al OLED
   bool _blinking = false;
@@ -67,6 +77,7 @@ class ReciDisplay {
   void render();
   void drawEyes();
   void drawMouth();
+  void drawQRCode();
   void drawArc(int16_t cx, int16_t cy, int16_t r, uint8_t quadrants, uint8_t thickness);
   void scheduleBlink();
 };

@@ -1,8 +1,9 @@
 # ESP32-CAM de Reci
 
-Este sketch es para el módulo **AI Thinker ESP32-CAM**. Captura una foto cada
-10 segundos, pide reconocimiento al backend y manda el saludo al Mega por UART.
-No guarda fotos ni contiene credenciales de Supabase.
+Este sketch es para el módulo **AI Thinker ESP32-CAM**. Para clasificar un
+residuo toma tres fotos con flash, consulta el backend y solo manda abrir una
+compuerta cuando existe una mayoría segura. No guarda fotos ni contiene
+credenciales de Supabase.
 
 ## Antes de compilar
 
@@ -56,3 +57,15 @@ Con el adaptador ESP32-CAM-MB por USB, selecciona **AI Thinker ESP32-CAM** y el
 puerto correcto. Si no carga automáticamente: GPIO0 a GND, pulsa Upload, quita
 GPIO0 de GND al terminar y pulsa Reset. Abre el monitor serial a 115200 para ver
 el resultado de cada reconocimiento.
+
+## Probar clasificación de residuos
+
+1. Inicia la web y `ia/vision-service`; la web debe tener configuradas
+   `VISION_SERVICE_URL` y `VISION_SERVICE_API_KEY`.
+2. Pon un único residuo centrado frente a la cámara, con fondo mate y luz frontal.
+3. En el Monitor Serial (115200) escribe **C** y envíalo.
+4. La ESP32 toma tres fotos VGA (QVGA sin PSRAM). Si al menos dos dicen
+   `vidrio` o `plastico`, manda `CMD:CLASSIFY:<material>` al Mega.
+
+Las fotos de esta validación no crean eventos ni puntos: la persistencia debe
+ocurrir una sola vez después del voto mayoritario.
