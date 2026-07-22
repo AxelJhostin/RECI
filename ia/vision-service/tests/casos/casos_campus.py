@@ -183,6 +183,46 @@ CASOS_CAMPUS = [
         }
     },
     {
+        "id": "TC17b", "nombre": "Gatorade PET — API confunde tapa plástica de color con metálica",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "media",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC17c", "nombre": "Gatorade vidrio 473ml — tapa metálica real con brillo nítido",
+        "esperado": "VIDRIO", "categoria": "CAMPUS_VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "alta",
+            "transparencia": "media", "color": "variado_vivo",
+            "forma": "cilindrica_ancha", "brillo": "alto_nitido",
+            "tapa": "twist_off_metalica", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC17c2", "nombre": "Gatorade vidrio — API mal lee tapa como rosca pero brillo nítido",
+        "esperado": "VIDRIO", "categoria": "CAMPUS_VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_estandar", "brillo": "alto_nitido",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
+        "id": "TC17c3", "nombre": "Gatorade PET — brillo difuso + rosca (no confundir con vidrio)",
+        "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_estandar", "brillo": "medio_difuso",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
         "id": "TC18", "nombre": "Cola Gallito gaseosa ecuatoriana plástico",
         "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
         "atributos": {

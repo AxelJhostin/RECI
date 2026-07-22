@@ -60,24 +60,41 @@ def _flip_de_pet_a_vidrio(antes: dict, despues: dict) -> bool:
 def _corregir_gatorade_ambiguo(atributos: dict, clase_tm: str,
                                prob_tm: float) -> dict:
     """
-    Gatorade PET con tapa metálica mal etiquetada por Claude cuando TM
-    no es concluyente (prueba12 en cámara).
+    Gatorade bidireccional:
+    - PET: tapa plástica de color mal leída como metálica + brillo difuso
+      → rosca_plastico (salvo TM vidrio ≥90%).
+    - Vidrio: brillo nítido + tapa mal leída como rosca_plastico
+      → twist_off_metalica (salvo TM plástico ≥92%).
     """
     out = dict(atributos)
     obj = out.get("objeto_reconocido", "")
     tapa = out.get("tapa", "")
-    tm_inseguro = (
-        (clase_tm == "vidrio" and (prob_tm or 0) < 0.70)
-        or (clase_tm == "plastico" and prob_tm is not None and prob_tm < 0.85)
-    )
+    brillo = out.get("brillo", "")
+    if obj != "botella_gatorade":
+        return out
+
+    tm_vidrio_fuerte = clase_tm == "vidrio" and (prob_tm or 0) >= 0.90
+    tm_plastico_fuerte = clase_tm == "plastico" and (prob_tm or 0) >= 0.92
+
+    # Vidrio real: brillo nítido + API confundió tapa metálica de color con rosca.
     if (
-        obj == "botella_gatorade"
-        and tapa in ("twist_off_metalica", "tapa_ancha_metalica", "corona_metalica")
-        and out.get("brillo") == "medio_difuso"
-        and tm_inseguro
+        brillo == "alto_nitido"
+        and tapa == "rosca_plastico"
+        and not tm_plastico_fuerte
     ):
-        out["tapa"] = "rosca_plastico"
-        out["confianza_ml"] = "media"
+        out["tapa"] = "twist_off_metalica"
+        return out
+
+    # PET: tapa plástica de color mal leída como metálica.
+    if tapa not in ("twist_off_metalica", "tapa_ancha_metalica", "corona_metalica"):
+        return out
+    if brillo != "medio_difuso":
+        return out
+    if tm_vidrio_fuerte:
+        return out
+
+    out["tapa"] = "rosca_plastico"
+    out["confianza_ml"] = "media"
     return out
 
 
