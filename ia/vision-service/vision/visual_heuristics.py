@@ -98,12 +98,49 @@ def _corregir_gatorade_ambiguo(atributos: dict, clase_tm: str,
     return out
 
 
+def _corregir_enjuague_y_atomizador(atributos: dict) -> dict:
+    """Colgate/Listerine y sprays: tapa casi siempre rosca plástica; nunca vidrio."""
+    out = dict(atributos)
+    obj = out.get("objeto_reconocido", "")
+    if obj == "botella_enjuague_bucal" and out.get("tapa") == "sin_tapa":
+        out["tapa"] = "rosca_plastico"
+        if out.get("brillo") == "alto_nitido":
+            out["brillo"] = "medio_difuso"
+    if obj == "botella_atomizador":
+        if out.get("tapa") in ("sin_tapa", "corona_metalica", "twist_off_metalica"):
+            out["tapa"] = "rosca_plastico"
+        if out.get("brillo") == "alto_nitido":
+            out["brillo"] = "medio_difuso"
+    return out
+
+
+def _corregir_vaso_espuma_como_carton(atributos: dict) -> dict:
+    """Corrige vasos de espuma blancos que la API clasificó como cartón."""
+    out = dict(atributos)
+    if out.get("objeto_reconocido") != "vaso_carton":
+        return out
+    if out.get("color") != "blanco_opaco":
+        return out
+    if out.get("forma") not in ("conica", "cilindrica_ancha", "cilindrica_estandar"):
+        return out
+
+    out["objeto_reconocido"] = "vaso_plastico_blanco"
+    out["rigidez"] = "rigido"
+    if out.get("textura") == "fibrosa":
+        out["textura"] = "lisa_sin_brillo"
+    if out.get("brillo") == "bajo":
+        out["brillo"] = "medio_difuso"
+    return out
+
+
 def _aplicar_veto_consenso_api(antes: dict, despues: dict,
                                tm_seguro_plastico: bool,
                                clase_tm: str = None,
                                prob_tm: float = None) -> dict:
     """Revoca un flip indebido PET→vidrio (A4)."""
     despues = _corregir_gatorade_ambiguo(despues, clase_tm, prob_tm)
+    despues = _corregir_enjuague_y_atomizador(despues)
+    despues = _corregir_vaso_espuma_como_carton(despues)
     if _api_lectura_pet_fiable(antes) and _flip_de_pet_a_vidrio(antes, despues):
         return dict(antes)
     if tm_seguro_plastico and _flip_de_pet_a_vidrio(antes, despues):

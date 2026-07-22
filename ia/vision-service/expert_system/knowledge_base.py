@@ -28,6 +28,7 @@ ATRIBUTOS = {
                              "botella_jugo_plastico", "tetra_pak",
                              "botella_pony_malta", "botella_enjuague_bucal",
                              "botella_cola_gallito", "botella_gatorade",
+                             "botella_atomizador",
                              "vaso_plastico_blanco", "vaso_vidrio",
                              "plato_plastico", "recipiente_plastico",
                              "cubierto_plastico", "snack_plastico", "pitillo",
@@ -128,6 +129,13 @@ class KnowledgeBase:
             Rule("R19_D", {"objeto_reconocido": "tetra_pak",               "confianza_ml": "alta"}, "ORGANICO",  0.98, "Tetra Pak (Del Valle/Sunny/Natura) identificado — cartón compuesto, no reciclable aquí"),
             Rule("R19_E", {"objeto_reconocido": "botella_pony_malta",      "confianza_ml": "alta"}, "VIDRIO",    0.97, "Pony Malta identificada — malta ecuatoriana en botella de vidrio ámbar"),
             Rule("R19_F", {"objeto_reconocido": "botella_enjuague_bucal",  "confianza_ml": "alta"}, "PLASTICO",  0.97, "Enjuague bucal (Colgate Plax/Listerine) identificado — plástico"),
+            Rule("R19_F2", {"objeto_reconocido": "botella_enjuague_bucal", "confianza_ml": "media"}, "PLASTICO", 0.92, "Probable enjuague bucal con confianza media — siempre plástico"),
+            # Aunque la API omita la tapa, el enjuague Colgate/Listerine es PET — no dejar
+            # que R49/R163 (vidrio sin tapa + brillo nítido) ganen por CF.
+            Rule("R19_F3", {"objeto_reconocido": "botella_enjuague_bucal", "tapa": "sin_tapa"}, "PLASTICO", 0.96, "Enjuague bucal sin tapa visible — sigue siendo plástico PET, nunca vidrio"),
+            Rule("R19_F4", {"objeto_reconocido": "botella_atomizador", "confianza_ml": "alta"}, "PLASTICO", 0.97, "Atomizador / spray / body splash / perfume en botella plástica"),
+            Rule("R19_F5", {"objeto_reconocido": "botella_atomizador", "confianza_ml": "media"}, "PLASTICO", 0.91, "Probable atomizador plástico con confianza media"),
+            Rule("R19_F6", {"objeto_reconocido": "botella_atomizador", "transparencia": "alta"}, "PLASTICO", 0.93, "Atomizador transparente — PET con gatillo o spray, no vidrio"),
 
             # Confianza media para los mismos objetos
             Rule("R19_G", {"objeto_reconocido": "botella_fioravanti",      "confianza_ml": "media"}, "PLASTICO", 0.90, "Probable Fioravanti con confianza media — plástico oscuro ecuatoriano"),
