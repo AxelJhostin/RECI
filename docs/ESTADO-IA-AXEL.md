@@ -28,7 +28,7 @@ vidrio | plastico | desconocido → Arduino Mega
   atomizadores y vasos de espuma/plástico.
 - Se agregaron pruebas de regresión para evitar que esas correcciones se
   pierdan con cambios posteriores.
-- Resultado actual: **117/117 pruebas formales aprobadas** y **3/3 pruebas
+- Resultado actual: **118/118 pruebas formales aprobadas** y **3/3 pruebas
   de heurísticas OpenCV aprobadas**.
 
 Commits relacionados:

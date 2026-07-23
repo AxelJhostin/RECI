@@ -24,7 +24,7 @@ bloqueante más grande para el Flujo A".
 
 Existe un prototipo (`dev/RECI`, repo separado) con exactamente esta pieza ya
 construida y probada: sistema experto que luego se amplió a 193 reglas con
-117/117 pruebas
+118/118 pruebas
 formales, y una integración con Claude vision cuyo prompt fue afinado contra
 capturas reales del campus hasta resolver 39/39 sin error (ver el changelog
 de `dev/RECI/README.md`, jul 2026). Reutilizar ese código en un servicio

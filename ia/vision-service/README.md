@@ -128,7 +128,7 @@ tal cual en este servicio) siguen fallando aquí con ese objeto.
 python3 tests/test_cases.py
 ```
 
-117 casos del sistema experto. Corre esto después de tocar cualquier regla en
+118 casos del sistema experto. Corre esto después de tocar cualquier regla en
 `expert_system/` para confirmar que no rompiste algo que ya funcionaba.
 
 ## Contenedor
@@ -155,7 +155,7 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 | `vision/tm_classifier.py` (MobileNetV2 local, TFLite) | ❌ No portado — el `.tflite` no está en este repo. Ver "Próximos pasos" |
 | `vision/camera.py` (captura + triple voto + persistencia de correcciones) | ❌ No aplica — la captura la hace el firmware de la ESP32-CAM, no este servicio |
 | `vision/clasificacion_log.py` (log a archivo local) | ❌ No portado — reemplazado por `logging` a stdout (los contenedores no garantizan disco persistente entre despliegues) |
-| `tests/test_cases.py` + `tests/casos/` (117 pruebas del sistema experto) | ✅ Alineado con RECI2 — 117/117 |
+| `tests/test_cases.py` + `tests/casos/` (118 pruebas del sistema experto) | ✅ Alineado con RECI2 — 118/118 |
 | `tests/test_refinar_api.py` (heurísticas OpenCV) | ✅ Portado — 3/3 |
 | `A5`/`A7` de `vision/camera.py` (triple voto, persistir correcciones P/V) | ❌ No portado — dependía de un loop de cámara local en Python que ya no existe. Ver "Próximos pasos" |
 
