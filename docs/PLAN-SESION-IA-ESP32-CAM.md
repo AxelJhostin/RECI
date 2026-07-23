@@ -27,7 +27,10 @@ a cargar el firmware de Reci.
    formas, colores y transparencias distintos.
 3. Preparar una mesa con fondo simple y luz estable. Evitar que una lámpara
    apunte directamente al lente o se refleje de frente en el envase.
-4. Crear una tabla local o en una hoja compartida con estas columnas:
+4. Abrir la plantilla
+   [`PLANTILLA-VALIDACION-ESP32-CAM.csv`](PLANTILLA-VALIDACION-ESP32-CAM.csv)
+   en Excel, Numbers o Google Sheets. Si se prefiere crear una hoja aparte,
+   usar estas mismas columnas:
 
    | ID | Material real | Objeto | Luz/fondo | Resultado | Confianza | Tiempo | Observación |
    | --- | --- | --- | --- | --- | --- | --- | --- |
