@@ -1,6 +1,6 @@
 # Estado de IA y Sistema Experto — Axel Hernández
 
-**Fecha:** 22 de julio de 2026
+**Fecha de actualización:** 23 de julio de 2026
 
 **Responsable:** Axel Hernández — Lead IA + Sistema Experto
 **Rama de trabajo:** `axel/ia-sistema-experto`
@@ -28,8 +28,9 @@ vidrio | plastico | desconocido → Arduino Mega
   atomizadores y vasos de espuma/plástico.
 - Se agregaron pruebas de regresión para evitar que esas correcciones se
   pierdan con cambios posteriores.
-- Resultado actual: **118/118 pruebas formales aprobadas** y **3/3 pruebas
-  de heurísticas OpenCV aprobadas**.
+- Resultado actual: **118/118 pruebas formales aprobadas (100 %)**. Estas
+  pruebas cubren vidrio, plástico, casos ambiguos, casos extremos, objetos
+  del campus, orgánicos y latas.
 
 Commits relacionados:
 
@@ -46,8 +47,8 @@ Commits relacionados:
   y Gemini quedan disponibles como alternativas, sin eliminarse.
 - OpenAI responde mediante Responses API y la respuesta se exige en JSON
   estructurado antes de pasar al sistema experto.
-- La integración de OpenAI tiene **3/3 pruebas unitarias sin red** y una
-  prueba real completada contra el endpoint local.
+- La integración de OpenAI tiene pruebas unitarias sin red y una prueba real
+  completada contra el endpoint local.
 
 Commit relacionado:
 
@@ -64,6 +65,12 @@ Commit relacionado:
   pero las dos primeras coincidieron y el voto mayoritario clasificó
   correctamente. Se debe observar este comportamiento en la siguiente
   batería de pruebas, sin cambiar reglas todavía.
+- La vista previa de la cámara se verificó desde Safari y la cámara entregó
+  imágenes correctamente. La IP de la ESP32-CAM es dinámica y puede cambiar
+  al reconectarla; por eso no se fija como configuración del proyecto.
+- En esta sesión no se ejecutaron nuevas pruebas físicas porque la cámara no
+  está conectada. Las próximas pruebas deben hacerse únicamente con la
+  ESP32-CAM que se usará en el sistema final.
 
 ## Qué no se ha hecho deliberadamente
 
@@ -91,6 +98,15 @@ no conserva precisión con esa cámara, se reentrenará con un dataset propio.
 6. Validar OpenAI con fotos reales (precisión, latencia y costo); usar Claude
    o Gemini solo como comparación cuando aparezca un caso ambiguo.
 
+### Alcance de las pruebas
+
+- La botella de chocolatada Toni de formato marrón/estrecho se considera un
+  caso atípico y queda fuera del conjunto de aceptación actual. No se añadió
+  una regla especial para ella, para evitar alterar el comportamiento de los
+  envases plásticos generales.
+- Las pruebas de aceptación se concentrarán en botellas y recipientes de
+  plástico y vidrio representativos del sistema.
+
 ## Coordinación requerida con Paula
 
 - Realizar la batería de pruebas de clasificación con objetos reales y
@@ -104,7 +120,7 @@ Mientras se desarrolla localmente, el servicio corre en la Mac. Desplegarlo
 significa que la app alojada pueda consultarlo sin depender de que esa Mac
 esté encendida.
 
-## Próxima sesión propuesta
+## Próxima sesión propuesta (cuando vuelva a estar disponible la cámara)
 
 1. Probar vidrio y plástico con cámara fija, luz estable y fondo simple.
 2. Guardar los resultados de cada intento en una tabla de validación.
