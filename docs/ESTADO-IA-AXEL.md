@@ -85,6 +85,13 @@ Commit relacionado:
 - La siguiente validación física debe repetir esas pruebas con la integración
   híbrida y la ESP32-CAM final, registrando por foto los dos resultados y la
   fusión.
+- Se localizaron y evaluaron 201 capturas reales QVGA etiquetadas como
+  vidrio. El modelo acertó **141/201 (70.15 %)**: 77/100 en una ronda y
+  63/100 en otra, además de una captura inicial correcta. No hay todavía
+  capturas ESP32-CAM guardadas de plástico.
+- La evidencia, limitaciones y protocolo de continuación están consolidados
+  en
+  [`VALIDACION-MODELO-LOCAL-ESP32-CAM.md`](VALIDACION-MODELO-LOCAL-ESP32-CAM.md).
 
 ## Qué no se ha hecho deliberadamente
 
@@ -102,7 +109,8 @@ ajustará mediante fine-tuning con el dataset propio.
 
 1. Capturar y etiquetar un dataset propio de la ESP32-CAM (meta inicial:
    mínimo 500 fotos por clase, con variedad de objetos, luz, ángulos y
-   fondos).
+   fondos). Ya existen 201 capturas locales de vidrio; deben reservarse por
+   sesión y no mezclarse todas dentro del entrenamiento.
 2. Crear el flujo de captura con vista en vivo para supervisar cada ronda de
    fotos mientras se guardan por clase.
 3. Evaluar el modelo integrado frente al dataset de la ESP32-CAM y construir

@@ -23,6 +23,12 @@ de Gatorade vidrio/plástico (`prueba10.jpeg` y `prueba12.jpeg`). Esta
 evidencia justifica que el modelo local no decida solo y que un conflicto
 fuerte produzca `desconocido`.
 
+La evaluación más relevante disponible usa 201 capturas QVGA reales de la
+ESP32-CAM etiquetadas como vidrio: **141/201 (70.15 %)** fueron correctas.
+Todavía no existen capturas guardadas de plástico con esa cámara. El reporte
+completo y el protocolo de continuación están en
+[`docs/VALIDACION-MODELO-LOCAL-ESP32-CAM.md`](../../../docs/VALIDACION-MODELO-LOCAL-ESP32-CAM.md).
+
 El servicio carga el modelo una sola vez. Intenta usar, en orden,
 `ai-edge-litert`, `tflite-runtime` o `tensorflow`. Si ninguno está disponible
 o el archivo falla, mantiene el flujo existente del proveedor visual y el
