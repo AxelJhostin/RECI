@@ -198,6 +198,21 @@ class VisionClassifier:
                 return json.loads(texto[inicio:fin])
             raise
 
+    @staticmethod
+    def _extraer_texto_openai(respuesta: dict) -> str:
+        """Extrae texto de Responses API, incluso si no entrega output_text resumido."""
+        texto = (respuesta.get("output_text") or "").strip()
+        if texto:
+            return texto
+
+        for salida in respuesta.get("output", []):
+            if salida.get("type") != "message":
+                continue
+            for contenido in salida.get("content", []):
+                if contenido.get("type") == "output_text" and contenido.get("text"):
+                    return contenido["text"].strip()
+        raise ValueError("OpenAI: respuesta sin texto de salida")
+
     def _payload_gemini(self, imagen_b64: str, mime_type: str) -> dict:
         return {
             "contents": [{
@@ -320,9 +335,7 @@ class VisionClassifier:
                             json=self._payload_openai(imagen_b64, mime_type, modelo),
                         )
                     response.raise_for_status()
-                    texto = response.json().get("output_text", "").strip()
-                    if not texto:
-                        raise ValueError("OpenAI: respuesta sin output_text")
+                    texto = self._extraer_texto_openai(response.json())
                     logger.info("vision openai ok | modelo=%s", modelo)
                     return texto
                 except httpx.HTTPStatusError as e:
