@@ -42,6 +42,9 @@ constexpr int kMegaTxPin = 14;
 constexpr unsigned long kMegaBaud = 9600;
 constexpr unsigned long kFlashWarmupMs = 220UL;
 constexpr unsigned long kCaptureIntervalMs = 350UL;
+// PUCEM_INVITADOS puede tardar más de 20 s en asignar la conexión a la placa.
+// CameraWebServer validó que esta misma red sí conecta si se le da más tiempo.
+constexpr unsigned long kWiFiConnectTimeoutMs = 60'000UL;
 constexpr uint8_t kCaptureCount = 3;
 constexpr char kBoundary[] = "ReciMaterialBoundary2026";
 
@@ -104,7 +107,7 @@ bool connectWiFi() {
   WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print(F("Conectando al Wi-Fi"));
-  const unsigned long deadline = millis() + 20'000UL;
+  const unsigned long deadline = millis() + kWiFiConnectTimeoutMs;
   while (WiFi.status() != WL_CONNECTED && static_cast<long>(millis() - deadline) < 0) {
     delay(300);
     Serial.print('.');
@@ -142,7 +145,9 @@ bool startCamera() {
   config.pin_reset = kCameraReset;
   config.xclk_freq_hz = 20'000'000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = psramFound() ? FRAMESIZE_VGA : FRAMESIZE_QVGA;
+  // QVGA (320x240) es suficiente para la clasificación de plástico/vidrio,
+  // acelera la transferencia al backend y deja más memoria libre.
+  config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 12;
   config.fb_count = 1;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
@@ -152,7 +157,7 @@ bool startCamera() {
     showOnLcd("Error de camara", "Revisa Reci");
     return false;
   }
-  Serial.println(psramFound() ? F("Camara en VGA") : F("AVISO: sin PSRAM, camara en QVGA"));
+  Serial.println(F("Camara en QVGA (optimizada)"));
   return true;
 }
 

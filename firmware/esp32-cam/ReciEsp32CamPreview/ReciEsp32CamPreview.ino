@@ -59,7 +59,7 @@ bool restartCameraForPreview() {
   config.pin_reset = kCameraReset;
   config.xclk_freq_hz = 20'000'000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = psramFound() ? FRAMESIZE_VGA : FRAMESIZE_QVGA;
+  config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 12;
   config.fb_count = psramFound() ? 2 : 1;
   config.grab_mode = psramFound() ? CAMERA_GRAB_LATEST : CAMERA_GRAB_WHEN_EMPTY;
@@ -69,7 +69,7 @@ bool restartCameraForPreview() {
     showOnLcd("Error de camara", "Revisa Reci");
     return false;
   }
-  Serial.println(psramFound() ? F("Vista previa: 2 buffers VGA")
+  Serial.println(psramFound() ? F("Vista previa: 2 buffers QVGA")
                                : F("AVISO: sin PSRAM, stream y C no son simultaneos"));
   return true;
 }
