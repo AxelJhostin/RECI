@@ -98,6 +98,10 @@ void showOnLcd(const String& firstLine, const String& secondLine) {
 
 bool connectWiFi() {
   WiFi.mode(WIFI_STA);
+  // En redes de campus la ESP32-CAM puede perder la asociación durante el
+  // ahorro de energía. La configuración coincide con CameraWebServer, que
+  // ya se validó con esta misma placa y red.
+  WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print(F("Conectando al Wi-Fi"));
   const unsigned long deadline = millis() + 20'000UL;
