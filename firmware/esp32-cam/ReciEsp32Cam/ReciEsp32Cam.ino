@@ -45,6 +45,10 @@ constexpr unsigned long kCaptureIntervalMs = 350UL;
 // PUCEM_INVITADOS puede tardar más de 20 s en asignar la conexión a la placa.
 // CameraWebServer validó que esta misma red sí conecta si se le da más tiempo.
 constexpr unsigned long kWiFiConnectTimeoutMs = 60'000UL;
+// El backend puede esperar hasta 25 s al proveedor de visión. El valor por
+// defecto de HTTPClient (5 s) producía el error -11 aunque la foto sí se
+// hubiera enviado; dejamos un pequeño margen para la respuesta local.
+constexpr uint16_t kVisionHttpTimeoutMs = 30'000;
 constexpr uint8_t kCaptureCount = 3;
 constexpr char kBoundary[] = "ReciMaterialBoundary2026";
 
@@ -187,6 +191,7 @@ String postClassify(camera_fb_t* frame, int& statusCode) {
     statusCode = -1;
     return "";
   }
+  http.setTimeout(kVisionHttpTimeoutMs);
   http.addHeader("Authorization", String("Bearer ") + RECI_ROBOT_API_KEY);
   http.addHeader("Content-Type", String("multipart/form-data; boundary=") + kBoundary);
   statusCode = http.sendRequest("POST", &payload, payload.totalLength());
