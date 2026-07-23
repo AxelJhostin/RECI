@@ -164,6 +164,32 @@ _GENERATION_CONFIG = {
 MAX_REINTENTOS = 1
 TIMEOUT_SEGUNDOS = 20.0
 
+# Veto aislado para la integración OpenAI. La heurística compartida puede
+# convertir una botella colorida en "lata" por su geometría/etiqueta; si la
+# propia API entregó señales fuertes de PET, conservamos esa lectura sin
+# modificar visual_heuristics.py ni el flujo de Claude/Gemini.
+_OPENAI_PET_OBJECTS = frozenset({
+    "botella_agua", "botella_gaseosa", "botella_energizante",
+    "botella_jugo_plastico", "botella_fioravanti", "botella_cola_gallito",
+})
+
+
+def _revocar_falso_lata_openai(original: dict, refinado: dict) -> dict:
+    if refinado.get("objeto_reconocido") != "lata":
+        return refinado
+    if original.get("objeto_reconocido") not in _OPENAI_PET_OBJECTS:
+        return refinado
+    if original.get("tapa") != "rosca_plastico":
+        return refinado
+    if original.get("transparencia") not in ("alta", "media"):
+        return refinado
+
+    logger.warning(
+        "veto OpenAI: heurística convirtió botella PET en lata | objeto=%s",
+        original.get("objeto_reconocido"),
+    )
+    return original
+
 
 class VisionClassifier:
     """Llama a un proveedor y devuelve los 9 atributos, refinados con OpenCV."""
@@ -372,9 +398,13 @@ class VisionClassifier:
             texto = self._llamar_openai(imagen_b64, mime_type)
 
         atributos = self._parsear_json(texto)
+        atributos_originales = dict(atributos)
 
         img_bgr = cv2.imdecode(np.frombuffer(imagen_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img_bgr is not None:
             atributos = refinar_atributos_api(atributos, img_bgr, clase_tm=None, prob_tm=None)
+
+        if self.vision_api == "openai":
+            atributos = _revocar_falso_lata_openai(atributos_originales, atributos)
 
         return atributos
