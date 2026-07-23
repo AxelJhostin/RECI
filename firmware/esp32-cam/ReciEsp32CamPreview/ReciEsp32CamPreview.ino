@@ -14,13 +14,22 @@
 // mayoritario que ReciEsp32Cam, sin copiar ni divergir su lógica.
 #define setup reciClassificationSetup
 #define loop reciClassificationLoop
+#define classifyResidue reciClassificationResidue
+#define readClassificationRequest reciClassificationReadRequest
 #include "../ReciEsp32Cam/ReciEsp32Cam.ino"
+#undef readClassificationRequest
+#undef classifyResidue
 #undef setup
 #undef loop
 
 namespace {
 
 httpd_handle_t previewServer = nullptr;
+// Safari y la clasificación compiten por los framebuffers de la cámara. Al
+// recibir C detenemos temporalmente el stream, de modo que las tres fotos de
+// clasificación siempre puedan obtener un buffer. Safari conserva el último
+// fotograma y se actualiza otra vez al finalizar la lectura.
+volatile bool classificationInProgress = false;
 
 // El firmware normal usa un solo framebuffer porque solo toma una foto cada
 // vez. La vista de Safari mantiene una captura activa, por lo que esta prueba
@@ -108,6 +117,10 @@ esp_err_t streamHandler(httpd_req_t* request) {
   char header[80];
 
   while (true) {
+    if (classificationInProgress) {
+      delay(20);
+      continue;
+    }
     camera_fb_t* frame = esp_camera_fb_get();
     if (frame == nullptr) return ESP_FAIL;
 
@@ -158,5 +171,12 @@ void setup() {
 }
 
 void loop() {
-  reciClassificationLoop();
+  while (Serial.available() > 0) {
+    const char command = static_cast<char>(Serial.read());
+    if (command == 'c' || command == 'C') {
+      classificationInProgress = true;
+      reciClassificationResidue();
+      classificationInProgress = false;
+    }
+  }
 }
