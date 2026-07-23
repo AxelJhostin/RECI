@@ -41,7 +41,9 @@ esp_err_t indexHandler(httpd_req_t* request) {
 esp_err_t captureHandler(httpd_req_t* request) {
   camera_fb_t* frame = esp_camera_fb_get();
   if (frame == nullptr) {
-    httpd_resp_send_err(request, HTTPD_503_SERVICE_UNAVAILABLE, "No se pudo capturar la foto");
+    httpd_resp_set_status(request, "503 Service Unavailable");
+    httpd_resp_set_type(request, "text/plain");
+    httpd_resp_sendstr(request, "No se pudo capturar la foto");
     return ESP_FAIL;
   }
 
