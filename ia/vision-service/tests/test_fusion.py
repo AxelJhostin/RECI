@@ -19,7 +19,7 @@ def test_acuerdo_refuerza_resultado():
     )
 
     assert result["material"] == "plastico"
-    assert result["confidence"] == 0.86
+    assert result["confidence"] == 0.87
     assert result["agreement"] is True
     assert result["method"] == "fusion_ponderada"
 
@@ -51,3 +51,24 @@ def test_fallback_conserva_flujo_actual_si_modelo_no_esta_disponible():
     assert result["confidence"] == 0.93
     assert result["method"] == "solo_proveedor"
 
+
+def test_gatorade_vidrio_no_es_bloqueado_por_error_conocido_del_tflite():
+    """RECI2/prueba10: local=plástico 0.93, proveedor/SE=vidrio."""
+    result = fuse_material_predictions(
+        "vidrio", 1.0, _local("plastico", 0.93)
+    )
+
+    assert result["material"] == "vidrio"
+    assert result["confidence"] == 0.721
+    assert result["agreement"] is False
+
+
+def test_gatorade_plastico_no_es_bloqueado_por_error_conocido_del_tflite():
+    """RECI2/prueba12: local=vidrio 0.765, proveedor/SE=plástico."""
+    result = fuse_material_predictions(
+        "plastico", 1.0, _local("vidrio", 0.765)
+    )
+
+    assert result["material"] == "plastico"
+    assert result["confidence"] == 0.7705
+    assert result["agreement"] is False

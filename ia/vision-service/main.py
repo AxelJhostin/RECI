@@ -70,8 +70,8 @@ def _env_float(name: str, default: float) -> float:
 LOCAL_MODEL_ENABLED = os.getenv("LOCAL_MODEL_ENABLED", "true").lower() not in {
     "0", "false", "no", "off",
 }
-PROVIDER_WEIGHT = _env_float("VISION_PROVIDER_WEIGHT", 0.60)
-LOCAL_WEIGHT = _env_float("VISION_LOCAL_WEIGHT", 0.40)
+PROVIDER_WEIGHT = _env_float("VISION_PROVIDER_WEIGHT", 0.70)
+LOCAL_WEIGHT = _env_float("VISION_LOCAL_WEIGHT", 0.30)
 FUSION_MIN_CONFIDENCE = _env_float("VISION_FUSION_MIN_CONFIDENCE", 0.70)
 
 try:

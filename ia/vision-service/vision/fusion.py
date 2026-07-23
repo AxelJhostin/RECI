@@ -24,8 +24,8 @@ def fuse_material_predictions(
     provider_confidence: float,
     local_prediction: dict[str, Any] | None,
     *,
-    provider_weight: float = 0.60,
-    local_weight: float = 0.40,
+    provider_weight: float = 0.70,
+    local_weight: float = 0.30,
     minimum_confidence: float = 0.70,
 ) -> dict[str, Any]:
     """

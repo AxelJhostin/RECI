@@ -50,7 +50,7 @@ Commits relacionados:
 - Se portó el MobileNetV2/TFLite de RECI2 (`run_20260721_2129`) al servicio.
   Cada una de las tres fotos ahora se analiza con OpenAI y con el modelo
   propio, produciendo seis predicciones sobre tres capturas.
-- La fusión inicial asigna 60 % de peso al proveedor y 40 % al modelo local.
+- La fusión inicial asigna 70 % de peso al proveedor y 30 % al modelo local.
   Un conflicto fuerte o un rechazo del sistema experto produce
   `desconocido`; el modelo binario no puede abrir una compuerta por sí solo.
 - Si el modelo local no carga, se conserva el flujo anterior de OpenAI,
@@ -59,7 +59,7 @@ Commits relacionados:
   etiquetadas de RECI2. Los dos errores fueron el par ambiguo Gatorade
   vidrio/plástico, por lo que todavía no se ajustan pesos ni se permite que
   el modelo local decida solo.
-- Resultado técnico después de la integración: **14/14 pruebas del servicio
+- Resultado técnico después de la integración: **16/16 pruebas del servicio
   de visión** y **118/118 pruebas del sistema experto** aprobadas.
 - La integración de OpenAI tiene pruebas unitarias sin red y una prueba real
   completada contra el endpoint local.

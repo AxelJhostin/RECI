@@ -29,8 +29,8 @@ OPENAI_MODEL=gpt-5.6-luna
 LOCAL_MODEL_ENABLED=true
 LOCAL_MODEL_PATH=model/model.tflite
 LOCAL_MODEL_LABELS=model/labels.txt
-VISION_PROVIDER_WEIGHT=0.60
-VISION_LOCAL_WEIGHT=0.40
+VISION_PROVIDER_WEIGHT=0.70
+VISION_LOCAL_WEIGHT=0.30
 VISION_FUSION_MIN_CONFIDENCE=0.70
 
 # Alternativas configurables:
@@ -196,7 +196,8 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 
 - **Validar el modelo portado con la ESP32-CAM**: registrar por cada una de
   las tres fotos el resultado de OpenAI, el resultado local y la fusión.
-  No cambiar los pesos 60/40 hasta tener una matriz de confusión real.
+  Los pesos iniciales 70/30 responden a los errores conocidos de Gatorade;
+  no volver a cambiarlos sin una matriz de confusión real.
 - **Adaptar el modelo si hace falta**: si existe una brecha entre la cámara
   de Mac usada en el entrenamiento y la ESP32-CAM, hacer fine-tuning con el
   dataset nuevo en vez de entrenar desde cero.

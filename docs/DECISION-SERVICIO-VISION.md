@@ -48,7 +48,7 @@ ESP32-CAM -> 3 fotos -> POST /api/vision/classify -> Vision Service /v1/classify
                                       -> OpenAI (9 atributos visuales)
                                       -> heurísticas OpenCV
                                       -> Sistema Experto (193 reglas, CF MYCIN)
-                                      -> fusión 60 % proveedor / 40 % modelo
+                                      -> fusión 70 % proveedor / 30 % modelo
                                      <- material + resultados de ambos
                        Supabase (recycle_events) <- si material != desconocido
 ESP32-CAM <- { material, confidence, rule_applied } -> reenvía CMD:OPEN:<material> al Arduino Mega
