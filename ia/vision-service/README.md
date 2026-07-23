@@ -94,6 +94,29 @@ cada foto. No corrige nada — solo te dice si la cámara + el prompt están
 entendiendo bien el objeto real, para decidir si vale la pena avanzar con
 esa cámara antes de invertir tiempo en la integración de hardware.
 
+## Capturar dataset propio con ESP32-CAM
+
+Para entrenar o evaluar un modelo con las imágenes reales de la cámara, carga
+temporalmente el ejemplo **CameraWebServer** de Arduino en la ESP32-CAM. Abre
+`http://IP_DE_LA_CAMARA` en el navegador y pulsa **Start Stream**: esa vista
+permanece abierta mientras el siguiente script descarga las fotografías.
+
+En otra terminal:
+
+```bash
+python3 scripts/capturar_dataset_esp32cam.py \
+  --camera http://IP_DE_LA_CAMARA \
+  --count 100 \
+  --interval 2
+```
+
+El script no requiere dependencias adicionales. En la terminal usa `P` para
+guardar una ronda de 100 fotos en `dataset-esp32cam/plastico/`, `V` para una
+ronda en `dataset-esp32cam/vidrio/` y `Q` para salir. El ejemplo oficial
+expone `GET /capture`; el firmware de producción de Reci no lo expone aún,
+por lo que esta captura se hace con CameraWebServer y después se vuelve a
+cargar el firmware de Reci para las pruebas de clasificación.
+
 `tests/fotos_dificiles/` trae casos reales que ya fallaron en `dev/RECI` —
 por ejemplo `gatorade_vidrio_473ml.jpeg` (TM 99.8% "plastico" y Claude Sonnet
 leyó la tapa como `rosca_plastico` en una foto nítida y bien iluminada, ver

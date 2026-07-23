@@ -34,6 +34,9 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
+# dataset local de capturas ESP32-CAM (no subir fotos ni etiquetas accidentales)
+dataset-esp32cam/
+
 # os
 .DS_Store
 Thumbs.db
