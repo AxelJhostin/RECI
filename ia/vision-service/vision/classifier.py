@@ -1,5 +1,5 @@
 # vision/classifier.py
-# Llama a Claude o Gemini para extraer los 9 atributos visuales de una imagen,
+# Llama a Claude, Gemini u OpenAI para extraer los 9 atributos visuales de una imagen,
 # y los refina con heurísticas OpenCV (vision/visual_heuristics.py).
 #
 # Adaptado de dev/RECI (vision/attribute_extractor.py). Diferencias:
@@ -30,7 +30,7 @@ logger = logging.getLogger("reci.vision")
 
 
 class VisionProviderError(RuntimeError):
-    """El proveedor de visión (Claude/Gemini) no respondió tras los reintentos."""
+    """El proveedor de visión no respondió tras los reintentos."""
 
 
 PROMPT_BASE = """Eres el módulo de visión del sistema experto Reci, un tacho inteligente de reciclaje universitario en Ecuador.
@@ -132,6 +132,24 @@ GEMINI_URL = (
 )
 CLAUDE_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_VERSION = "2023-06-01"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+
+_ATRIBUTOS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "objeto_reconocido": {"type": "string"},
+        "confianza_ml": {"type": "string", "enum": ["alta", "media", "baja"]},
+        "transparencia": {"type": "string", "enum": ["alta", "media", "baja", "ninguna"]},
+        "color": {"type": "string", "enum": ["transparente", "ambar", "verde_oscuro", "blanco_opaco", "negro", "variado_vivo", "marron_tierra", "metalico"]},
+        "forma": {"type": "string", "enum": ["cilindrica_delgada", "cilindrica_estandar", "cilindrica_ancha", "conica", "rectangular_plana", "irregular"]},
+        "brillo": {"type": "string", "enum": ["alto_nitido", "medio_difuso", "bajo", "metalico"]},
+        "tapa": {"type": "string", "enum": ["rosca_plastico", "corona_metalica", "twist_off_metalica", "tapa_ancha_metalica", "domo_plastico", "sin_tapa", "sellado"]},
+        "textura": {"type": "string", "enum": ["lisa_brillante", "lisa_sin_brillo", "rugosa", "fibrosa"]},
+        "rigidez": {"type": "string", "enum": ["rigido", "flexible", "indefinido"]},
+    },
+    "required": ["objeto_reconocido", "confianza_ml", "transparencia", "color", "forma", "brillo", "tapa", "textura", "rigidez"],
+}
 
 _GENERATION_CONFIG = {
     "temperature":      0.1,
@@ -148,7 +166,7 @@ TIMEOUT_SEGUNDOS = 20.0
 
 
 class VisionClassifier:
-    """Llama a Claude o Gemini y devuelve los 9 atributos, ya refinados con OpenCV."""
+    """Llama a un proveedor y devuelve los 9 atributos, refinados con OpenCV."""
 
     def __init__(self):
         config = resolver_config_vision()
@@ -156,11 +174,12 @@ class VisionClassifier:
         self.proveedor_label = config["proveedor_label"]
         self.modelos = config["modelos"]
         self.modelo_primario = config["modelo_primario"]
-        self.api_key = (
-            os.environ.get("ANTHROPIC_API_KEY", "")
-            if self.vision_api == "claude"
-            else os.environ.get("GEMINI_API_KEY", "")
-        )
+        key_by_provider = {
+            "claude": "ANTHROPIC_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "openai": "OPENAI_API_KEY",
+        }
+        self.api_key = os.environ.get(key_by_provider[self.vision_api], "")
         self.advertencias = config["advertencias"]
 
     @staticmethod
@@ -201,6 +220,31 @@ class VisionClassifier:
                     {"type": "text", "text": PROMPT_BASE},
                 ],
             }],
+        }
+
+    def _payload_openai(self, imagen_b64: str, mime_type: str, modelo: str) -> dict:
+        return {
+            "model": modelo,
+            "input": [{
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": PROMPT_BASE},
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:{mime_type};base64,{imagen_b64}",
+                        "detail": "low",
+                    },
+                ],
+            }],
+            "reasoning": {"effort": "low"},
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "atributos_residuo",
+                    "strict": True,
+                    "schema": _ATRIBUTOS_SCHEMA,
+                }
+            },
         }
 
     def _llamar_claude(self, imagen_b64: str, mime_type: str) -> str:
@@ -263,12 +307,44 @@ class VisionClassifier:
                     break
         raise VisionProviderError(f"Gemini no respondió: {ultimo_error}")
 
+    def _llamar_openai(self, imagen_b64: str, mime_type: str) -> str:
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        ultimo_error = None
+        for modelo in self.modelos:
+            for intento in range(MAX_REINTENTOS + 1):
+                try:
+                    with httpx.Client(timeout=TIMEOUT_SEGUNDOS) as client:
+                        response = client.post(
+                            OPENAI_RESPONSES_URL,
+                            headers=headers,
+                            json=self._payload_openai(imagen_b64, mime_type, modelo),
+                        )
+                    response.raise_for_status()
+                    texto = response.json().get("output_text", "").strip()
+                    if not texto:
+                        raise ValueError("OpenAI: respuesta sin output_text")
+                    logger.info("vision openai ok | modelo=%s", modelo)
+                    return texto
+                except httpx.HTTPStatusError as e:
+                    ultimo_error = e
+                    status = e.response.status_code
+                    if status in (429, 500, 502, 503, 504) and intento < MAX_REINTENTOS:
+                        time.sleep(2.0)
+                        continue
+                    logger.warning("vision openai fallo | modelo=%s status=%s", modelo, status)
+                    break
+                except (httpx.RequestError, ValueError) as e:
+                    ultimo_error = e
+                    logger.warning("vision openai error | modelo=%s error=%s", modelo, e)
+                    break
+        raise VisionProviderError(f"OpenAI no respondió: {ultimo_error}")
+
     def clasificar(self, imagen_bytes: bytes, mime_type: str) -> dict:
         """
         Recibe los bytes crudos de la imagen (JPEG/PNG/WebP) y devuelve los
         9 atributos visuales, ya refinados con OpenCV (lata, vidrio, metal).
 
-        Lanza VisionProviderError si Claude/Gemini no responde — sin
+        Lanza VisionProviderError si el proveedor no responde — sin
         clasificador local de respaldo en este servicio (ver
         docs/DECISION-SERVICIO-VISION.md), así que el llamador debe tratarlo
         como "sin clasificación posible" en vez de reintentar indefinidamente.
@@ -277,8 +353,10 @@ class VisionClassifier:
 
         if self.vision_api == "claude":
             texto = self._llamar_claude(imagen_b64, mime_type)
-        else:
+        elif self.vision_api == "gemini":
             texto = self._llamar_gemini(imagen_b64, mime_type)
+        else:
+            texto = self._llamar_openai(imagen_b64, mime_type)
 
         atributos = self._parsear_json(texto)
 

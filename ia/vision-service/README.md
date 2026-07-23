@@ -1,9 +1,9 @@
 # Servicio de visión de Reci
 
 Servicio FastAPI privado que clasifica una foto de residuo como `vidrio`,
-`plastico` o `desconocido`. Llama a Claude o Gemini para extraer 9 atributos
+`plastico` o `desconocido`. Llama a Claude, Gemini u OpenAI para extraer 9 atributos
 visuales del objeto, los refina con heurísticas OpenCV, y corre el sistema
-experto de Reci (174 reglas, CF MYCIN, meta-reglas, forward + backward
+experto de Reci (193 reglas, CF MYCIN, meta-reglas, forward + backward
 chaining — portado de `dev/RECI/expert_system/`) para decidir el material.
 
 No persiste imágenes ni atributos: cada petición es independiente. Ver
@@ -22,6 +22,11 @@ CLAUDE_MODEL=claude-sonnet-4-6
 # Alternativa:
 # VISION_API=gemini
 # GEMINI_API_KEY=...
+
+# Alternativa OpenAI (Responses API):
+# VISION_API=openai
+# OPENAI_API_KEY=...
+# OPENAI_MODEL=gpt-5.6-luna
 ```
 
 `CLAUDE_MODEL=claude-sonnet-4-6` es el recomendado — en `dev/RECI` (el
@@ -102,8 +107,7 @@ tal cual en este servicio) siguen fallando aquí con ese objeto.
 python3 tests/test_cases.py
 ```
 
-110 casos del sistema experto, portados de `dev/RECI` sin cambios (mismos
-110/110 que allá). Corre esto después de tocar cualquier regla en
+117 casos del sistema experto. Corre esto después de tocar cualquier regla en
 `expert_system/` para confirmar que no rompiste algo que ya funcionaba.
 
 ## Contenedor
@@ -124,14 +128,14 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 
 | De `dev/RECI` | Estado aquí |
 |---|---|
-| `expert_system/` completo (174 reglas, CF MYCIN, meta-reglas) | ✅ Copiado sin cambios — es Python puro, sin dependencia de hardware ni archivos |
+| `expert_system/` completo (193 reglas, CF MYCIN, meta-reglas) | ✅ Portado y ampliado con las correcciones de RECI2 — es Python puro, sin dependencia de hardware ni archivos |
 | `vision/visual_heuristics.py` | ✅ Copiado sin cambios — funciona sin contexto de un TM local (queda como `clase_tm=None`) |
-| `vision/attribute_extractor.py` (llamada a Claude/Gemini + prompt) | ⚠️ Reescrito en `vision/classifier.py` — mismo prompt y misma lógica de llamada, sin el bloque de "contexto TM" (no hay clasificador local) y con menos reintentos (esta llamada ya vive dentro de una cadena ESP32-CAM → Next.js → aquí → proveedor) |
+| `vision/attribute_extractor.py` (llamada a Claude/Gemini + prompt) | ⚠️ Reescrito en `vision/classifier.py` — soporta Claude, Gemini y OpenAI, sin el bloque de "contexto TM" (no hay clasificador local) y con menos reintentos |
 | `vision/tm_classifier.py` (MobileNetV2 local, TFLite) | ❌ No portado — el `.tflite` no está en este repo. Ver "Próximos pasos" |
 | `vision/camera.py` (captura + triple voto + persistencia de correcciones) | ❌ No aplica — la captura la hace el firmware de la ESP32-CAM, no este servicio |
 | `vision/clasificacion_log.py` (log a archivo local) | ❌ No portado — reemplazado por `logging` a stdout (los contenedores no garantizan disco persistente entre despliegues) |
-| `tests/test_cases.py` + `tests/casos/` (110 pruebas del sistema experto) | ✅ Copiado sin cambios — 110/110 aquí también |
-| `tests/test_refinar_api.py` (heurísticas OpenCV) | ❌ No portado todavía — se puede traer igual que `test_cases.py` si hace falta |
+| `tests/test_cases.py` + `tests/casos/` (117 pruebas del sistema experto) | ✅ Alineado con RECI2 — 117/117 |
+| `tests/test_refinar_api.py` (heurísticas OpenCV) | ✅ Portado — 3/3 |
 | `A5`/`A7` de `vision/camera.py` (triple voto, persistir correcciones P/V) | ❌ No portado — dependía de un loop de cámara local en Python que ya no existe. Ver "Próximos pasos" |
 
 ## Próximos pasos (no bloquean el MVP)
