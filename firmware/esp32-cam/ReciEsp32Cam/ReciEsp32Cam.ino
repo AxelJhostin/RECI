@@ -281,7 +281,30 @@ void classifyResidue() {
     const String material = document["material"].as<String>();
     const float confidence = document["confidence"] | 0.0F;
     addVote(votes, material, confidence);
-    Serial.printf("foto %u: %s (%.2f)\n", index + 1, material.c_str(), confidence);
+
+    // El servicio híbrido analiza esta misma foto con el proveedor visual y
+    // con el MobileNetV2 local. Mostrar ambos resultados deja visibles las
+    // seis predicciones (dos por cada una de las tres capturas) sin tomar
+    // fotos distintas ni alterar el voto mayoritario del firmware.
+    JsonVariantConst providerResult = document["vision_provider_result"];
+    JsonVariantConst localResult = document["vision_local_result"];
+    if (!providerResult.isNull() && !localResult.isNull()) {
+      const String providerMaterial = providerResult["material"].as<String>();
+      const float providerConfidence = providerResult["confidence"] | 0.0F;
+      const String localMaterial = localResult["material"].as<String>();
+      const float localConfidence = localResult["confidence"] | 0.0F;
+      Serial.printf(
+          "foto %u: OpenAI=%s (%.2f) | modelo=%s (%.2f) | fusion=%s (%.2f)\n",
+          index + 1,
+          providerMaterial.c_str(),
+          providerConfidence,
+          localMaterial.c_str(),
+          localConfidence,
+          material.c_str(),
+          confidence);
+    } else {
+      Serial.printf("foto %u: %s (%.2f)\n", index + 1, material.c_str(), confidence);
+    }
     if (index + 1 < kCaptureCount) delay(kCaptureIntervalMs);
   }
 

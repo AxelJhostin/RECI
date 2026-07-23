@@ -3,9 +3,10 @@
 # y los refina con heurísticas OpenCV (vision/visual_heuristics.py).
 #
 # Adaptado de dev/RECI (vision/attribute_extractor.py). Diferencias:
-# - Sin contexto de un clasificador TM local (la ESP32-CAM no corre ningún
-#   modelo — ver docs/DECISION-SERVICIO-VISION.md) — se usa el prompt base
-#   directo, sin la sección "CONTEXTO DEL CLASIFICADOR RÁPIDO".
+# - El proveedor se mantiene independiente del clasificador TFLite local:
+#   ambos analizan la misma foto y main.py fusiona sus resultados después.
+#   Esto permite medir seis predicciones reales por depósito sin que una
+#   señal contamine a la otra.
 # - Sin lógica de cámara/hilo — este servicio es un endpoint HTTP síncrono.
 # - Reintentos recortados (esta llamada ahora es parte de una cadena en vivo
 #   ESP32-CAM → Next.js → aquí → Claude/Gemini; cada reintento le suma
@@ -383,10 +384,9 @@ class VisionClassifier:
         Recibe los bytes crudos de la imagen (JPEG/PNG/WebP) y devuelve los
         9 atributos visuales, ya refinados con OpenCV (lata, vidrio, metal).
 
-        Lanza VisionProviderError si el proveedor no responde — sin
-        clasificador local de respaldo en este servicio (ver
-        docs/DECISION-SERVICIO-VISION.md), así que el llamador debe tratarlo
-        como "sin clasificación posible" en vez de reintentar indefinidamente.
+        Lanza VisionProviderError si el proveedor no responde. El modelo local
+        es binario y no reconoce objetos rechazables (lata, orgánico, cartón),
+        así que no abre una compuerta por sí solo cuando el proveedor falla.
         """
         imagen_b64 = base64.b64encode(imagen_bytes).decode("utf-8")
 

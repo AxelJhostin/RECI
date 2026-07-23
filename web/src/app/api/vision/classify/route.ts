@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
 }
 
 // ─── Clasificador ────────────────────────────────────────────────────────
-// Llama a ia/vision-service: Claude/Gemini + heurísticas OpenCV + sistema
-// experto (174 reglas, portado de dev/RECI). Ver
+// Llama a ia/vision-service: proveedor + MobileNetV2 + heurísticas OpenCV +
+// sistema experto (193 reglas) + fusión ponderada. Ver
 // docs/DECISION-SERVICIO-VISION.md.
 async function classifyImage(image: File): Promise<VisionClassifyResult> {
   try {

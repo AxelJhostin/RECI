@@ -1,10 +1,15 @@
 # Servicio de visión de Reci
 
 Servicio FastAPI privado que clasifica una foto de residuo como `vidrio`,
-`plastico` o `desconocido`. Llama a Claude, Gemini u OpenAI para extraer 9 atributos
-visuales del objeto, los refina con heurísticas OpenCV, y corre el sistema
-experto de Reci (193 reglas, CF MYCIN, meta-reglas, forward + backward
-chaining — portado de `dev/RECI/expert_system/`) para decidir el material.
+`plastico` o `desconocido`. Cada foto se analiza de forma independiente con
+el MobileNetV2/TFLite entrenado por Axel y con Claude, Gemini u OpenAI. Los
+atributos del proveedor se refinan con OpenCV y pasan por el sistema experto
+de Reci (193 reglas, CF MYCIN, meta-reglas, forward + backward chaining).
+Después se fusionan ambas señales dando más peso al proveedor.
+
+La ESP32-CAM mantiene tres capturas por depósito: esto produce seis
+predicciones visibles, tres del modelo propio y tres del proveedor, sobre
+exactamente las mismas imágenes.
 
 No persiste imágenes ni atributos: cada petición es independiente. Ver
 [`docs/DECISION-SERVICIO-VISION.md`](../../docs/DECISION-SERVICIO-VISION.md)
@@ -20,6 +25,14 @@ VISION_API=openai
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.6-luna
 
+# Fusión híbrida (valores predeterminados):
+LOCAL_MODEL_ENABLED=true
+LOCAL_MODEL_PATH=model/model.tflite
+LOCAL_MODEL_LABELS=model/labels.txt
+VISION_PROVIDER_WEIGHT=0.60
+VISION_LOCAL_WEIGHT=0.40
+VISION_FUSION_MIN_CONFIDENCE=0.70
+
 # Alternativas configurables:
 # VISION_API=claude
 # ANTHROPIC_API_KEY=sk-ant-...
@@ -32,6 +45,12 @@ El proveedor principal se selecciona explícitamente con `VISION_API=openai`.
 Claude y Gemini se conservan como alternativas de diagnóstico; la decisión de
 mantener OpenAI debe validarse con las fotos reales de la ESP32-CAM mediante
 la plantilla de pruebas antes del despliegue.
+
+El modelo local solo conoce `plastico` y `vidrio`. Por eso nunca puede
+convertir en aceptado un resultado `desconocido` del proveedor y el sistema
+experto. Si existe un conflicto fuerte, la fusión devuelve `desconocido` y no
+abre ninguna compuerta. Si el runtime o el archivo TFLite no están
+disponibles, el servicio conserva el flujo anterior del proveedor.
 
 ## Desarrollo local
 
@@ -71,8 +90,23 @@ Respuesta esperada:
   "conclusion_se": "VIDRIO",
   "atributos": { "objeto_reconocido": "botella_cerveza_vidrio", "...": "..." },
   "reglas_disparadas": 3,
-  "vision_proveedor": "claude",
-  "vision_modelo": "claude-sonnet-4-6"
+  "vision_proveedor": "openai",
+  "vision_modelo": "gpt-5.6-luna",
+  "vision_provider_result": {
+    "material": "vidrio",
+    "confidence": 0.95
+  },
+  "vision_local_result": {
+    "material": "vidrio",
+    "confidence": 0.98,
+    "model": "model.tflite"
+  },
+  "vision_fusion": {
+    "material": "vidrio",
+    "confidence": 0.962,
+    "agreement": true,
+    "method": "fusion_ponderada"
+  }
 }
 ```
 
@@ -95,9 +129,9 @@ esa cámara antes de invertir tiempo en la integración de hardware.
 ## Capturar dataset propio con ESP32-CAM
 
 Para entrenar o evaluar un modelo con las imágenes reales de la cámara, carga
-temporalmente el ejemplo **CameraWebServer** de Arduino en la ESP32-CAM. Abre
-`http://IP_DE_LA_CAMARA` en el navegador y pulsa **Start Stream**: esa vista
-permanece abierta mientras el siguiente script descarga las fotografías.
+temporalmente `firmware/esp32-cam/ReciEsp32CamPreview/`. Abre
+`http://IP_DE_LA_CAMARA` en el navegador: esa vista permanece abierta
+mientras el siguiente script descarga las fotografías desde `/capture`.
 
 En otra terminal:
 
@@ -110,10 +144,9 @@ python3 scripts/capturar_dataset_esp32cam.py \
 
 El script no requiere dependencias adicionales. En la terminal usa `P` para
 guardar una ronda de 100 fotos en `dataset-esp32cam/plastico/`, `V` para una
-ronda en `dataset-esp32cam/vidrio/` y `Q` para salir. El ejemplo oficial
-expone `GET /capture`; el firmware de producción de Reci no lo expone aún,
-por lo que esta captura se hace con CameraWebServer y después se vuelve a
-cargar el firmware de Reci para las pruebas de clasificación.
+ronda en `dataset-esp32cam/vidrio/` y `Q` para salir. El sketch de diagnóstico
+expone `GET /capture`; al terminar se vuelve a cargar el firmware normal de
+Reci.
 
 `tests/fotos_dificiles/` trae casos reales que ya fallaron en `dev/RECI` —
 por ejemplo `gatorade_vidrio_473ml.jpeg` (TM 99.8% "plastico" y Claude Sonnet
@@ -150,26 +183,23 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 | De `dev/RECI` | Estado aquí |
 |---|---|
 | `expert_system/` completo (193 reglas, CF MYCIN, meta-reglas) | ✅ Portado y ampliado con las correcciones de RECI2 — es Python puro, sin dependencia de hardware ni archivos |
-| `vision/visual_heuristics.py` | ✅ Copiado sin cambios — funciona sin contexto de un TM local (queda como `clase_tm=None`) |
-| `vision/attribute_extractor.py` (llamada a Claude/Gemini + prompt) | ⚠️ Reescrito en `vision/classifier.py` — soporta Claude, Gemini y OpenAI, sin el bloque de "contexto TM" (no hay clasificador local) y con menos reintentos |
-| `vision/tm_classifier.py` (MobileNetV2 local, TFLite) | ❌ No portado — el `.tflite` no está en este repo. Ver "Próximos pasos" |
+| `vision/visual_heuristics.py` | ✅ Portado y ampliado; el proveedor se refina de forma independiente antes de la fusión |
+| `vision/attribute_extractor.py` (llamada a Claude/Gemini + prompt) | ⚠️ Reescrito en `vision/classifier.py` — soporta Claude, Gemini y OpenAI, con menos reintentos |
+| MobileNetV2 local/TFLite | ✅ Portado desde `run_20260721_2129`; `vision/local_model.py` lo carga una vez y `vision/fusion.py` combina sus probabilidades |
 | `vision/camera.py` (captura + triple voto + persistencia de correcciones) | ❌ No aplica — la captura la hace el firmware de la ESP32-CAM, no este servicio |
 | `vision/clasificacion_log.py` (log a archivo local) | ❌ No portado — reemplazado por `logging` a stdout (los contenedores no garantizan disco persistente entre despliegues) |
 | `tests/test_cases.py` + `tests/casos/` (118 pruebas del sistema experto) | ✅ Alineado con RECI2 — 118/118 |
 | `tests/test_refinar_api.py` (heurísticas OpenCV) | ✅ Portado — 3/3 |
 | `A5`/`A7` de `vision/camera.py` (triple voto, persistir correcciones P/V) | ❌ No portado — dependía de un loop de cámara local en Python que ya no existe. Ver "Próximos pasos" |
 
-## Próximos pasos (no bloquean el MVP)
+## Próximos pasos
 
-- **Modelo propio como primer voto**: si se entrena el MobileNetV2 con fotos
-  reales de la ESP32-CAM (Fase 3 del plan, dataset propio ≥500 img/clase),
-  se puede correr aquí mismo con `tflite-runtime` — este servicio SÍ tiene
-  cómputo para eso, a diferencia de la ESP32-CAM. Sería el mismo patrón
-  híbrido de `dev/RECI` (TM da contexto → Claude/Gemini decide), pero
-  corriendo en este contenedor en vez de en un Raspberry Pi.
-- **Triple captura + voto mayoritario**: la ESP32-CAM podría mandar 3 fotos
-  por evento (o 3 peticiones seguidas) y este servicio votar por mayoría —
-  mismo patrón que `A5` en `dev/RECI`, adaptado a la arquitectura cloud.
+- **Validar el modelo portado con la ESP32-CAM**: registrar por cada una de
+  las tres fotos el resultado de OpenAI, el resultado local y la fusión.
+  No cambiar los pesos 60/40 hasta tener una matriz de confusión real.
+- **Adaptar el modelo si hace falta**: si existe una brecha entre la cámara
+  de Mac usada en el entrenamiento y la ESP32-CAM, hacer fine-tuning con el
+  dataset nuevo en vez de entrenar desde cero.
 - **Recalibrar `visual_heuristics.py`**: los umbrales de brillo/color se
   afinaron con fotos de ~1280×720; la ESP32-CAM captura a 320×240
   (`FRAMESIZE_QVGA`) o menos. Conviene validar con fotos reales de la

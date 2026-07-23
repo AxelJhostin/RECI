@@ -64,8 +64,19 @@ el resultado de cada reconocimiento.
    `VISION_SERVICE_URL` y `VISION_SERVICE_API_KEY`.
 2. Pon un único residuo centrado frente a la cámara, con fondo mate y luz frontal.
 3. En el Monitor Serial (115200) escribe **C** y envíalo.
-4. La ESP32 toma tres fotos VGA (QVGA sin PSRAM). Si al menos dos dicen
-   `vidrio` o `plastico`, manda `CMD:CLASSIFY:<material>` al Mega.
+4. La ESP32 toma tres fotos QVGA. Cada foto recibe una predicción del
+   proveedor y otra del MobileNetV2 local; el Monitor Serial muestra ambas y
+   la fusión. Si al menos dos resultados fusionados dicen `vidrio` o
+   `plastico`, manda `CMD:CLASSIFY:<material>` al Mega.
+
+Salida esperada con el servicio híbrido:
+
+```text
+foto 1: OpenAI=plastico (0.96) | modelo=plastico (0.98) | fusion=plastico (0.97)
+foto 2: OpenAI=plastico (0.94) | modelo=plastico (0.99) | fusion=plastico (0.96)
+foto 3: OpenAI=plastico (0.95) | modelo=vidrio (0.91) | fusion=desconocido (0.00)
+Resultado final: plastico
+```
 
 Las fotos de esta validación no crean eventos ni puntos: la persistencia debe
 ocurrir una sola vez después del voto mayoritario.

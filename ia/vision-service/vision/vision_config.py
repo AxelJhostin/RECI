@@ -1,8 +1,8 @@
 # vision/vision_config.py
 # Configuración y validación del proveedor de visión (Claude / Gemini / OpenAI)
-# Adaptado de dev/RECI (vision/vision_config.py) — sin referencias a TM local:
-# este servicio no tiene modelo .tflite, la ESP32-CAM no envía contexto de un
-# clasificador local.
+# Adaptado de dev/RECI (vision/vision_config.py). Esta configuración selecciona
+# el proveedor remoto; el MobileNetV2 local se configura por separado y se
+# fusiona después para mantener independientes ambas predicciones.
 
 from __future__ import annotations
 

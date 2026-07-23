@@ -5,3 +5,4 @@ python-dotenv==1.2.1
 httpx==0.28.1
 opencv-python-headless==4.10.0.84
 numpy==2.2.6
+tensorflow==2.20.0
