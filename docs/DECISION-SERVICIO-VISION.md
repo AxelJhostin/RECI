@@ -6,8 +6,9 @@
 ## Decisión
 
 La clasificación vidrio/plástico de Reci se implementa como un servicio
-privado en Python, FastAPI, Claude/Gemini (vision) y el sistema experto de
-Reci (174 reglas, CF MYCIN, meta-reglas, forward + backward chaining). La app
+privado en Python, FastAPI, OpenAI (vision) y el sistema experto de
+Reci (193 reglas, CF MYCIN, meta-reglas, forward + backward chaining). Claude
+y Gemini quedan como alternativas configurables. La app
 Next.js conserva el contrato HTTP, la autenticación del robot y la
 persistencia en Supabase; la ESP32-CAM solo captura la imagen y se comunica
 con la API del robot. Mismo patrón que `face-service` (ver
@@ -22,7 +23,8 @@ con la ESP32-CAM que todavía no existe — es, según el propio plan, "el
 bloqueante más grande para el Flujo A".
 
 Existe un prototipo (`dev/RECI`, repo separado) con exactamente esta pieza ya
-construida y probada: sistema experto de 174 reglas con 110/110 pruebas
+construida y probada: sistema experto que luego se amplió a 193 reglas con
+117/117 pruebas
 formales, y una integración con Claude vision cuyo prompt fue afinado contra
 capturas reales del campus hasta resolver 39/39 sin error (ver el changelog
 de `dev/RECI/README.md`, jul 2026). Reutilizar ese código en un servicio
@@ -31,7 +33,7 @@ conversión de modelo. El MobileNetV2 propio puede seguir desarrollándose en
 paralelo (ver "Próximos pasos" en `ia/vision-service/README.md`) como
 optimización de costo/latencia, sin bloquear el Flujo A mientras tanto.
 
-Incluir el modelo o las llamadas a Claude/Gemini directamente en el Route
+Incluir el modelo o las llamadas al proveedor de visión directamente en el Route
 Handler de Vercel tampoco es apropiado: son llamadas de red con reintentos
 que pueden tardar varios segundos, y mezclar esa lógica con la ruta HTTP que
 sirve a la ESP32-CAM la vuelve más frágil y difícil de versionar por
@@ -41,9 +43,9 @@ separado del resto de la web.
 
 ```text
 ESP32-CAM -> POST /api/vision/classify -> Vision Service /v1/classify
-                                        -> Claude/Gemini (9 atributos visuales)
+                                        -> OpenAI (9 atributos visuales)
                                         -> heurísticas OpenCV (refina lata/vidrio/metal)
-                                        -> Sistema Experto (174 reglas, CF MYCIN)
+                                        -> Sistema Experto (193 reglas, CF MYCIN)
                                        <-  { material, confidence, rule_applied }
                        Supabase (recycle_events) <- si material != desconocido
 ESP32-CAM <- { material, confidence, rule_applied } -> reenvía CMD:OPEN:<material> al Arduino Mega
@@ -57,7 +59,7 @@ contenedor.
 ## Qué se reutilizó de `dev/RECI` y qué no
 
 Ver la tabla completa en [`ia/vision-service/README.md`](../ia/vision-service/README.md#qué-se-portó-de-devreci-y-qué-no).
-Resumen: `expert_system/` se copió sin cambios; la llamada a Claude/Gemini y
+Resumen: `expert_system/` se portó y amplió; la llamada al proveedor de visión y
 el prompt se reescribieron en `vision/classifier.py` sin el contexto de un
 clasificador local (no hay TM en la ESP32-CAM); no se portó `camera.py`
 (captura ahora vive en el firmware) ni el log a archivo (reemplazado por
@@ -86,9 +88,9 @@ VISION_SERVICE_API_KEY=<secreto-compartido>
 
 ```bash
 VISION_SERVICE_API_KEY=<mismo-secreto-compartido>
-VISION_API=claude
-ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-6
+VISION_API=openai
+OPENAI_API_KEY=<clave-local-o-del-host>
+OPENAI_MODEL=gpt-5.6-luna
 ```
 
 ## Contrato de clasificación

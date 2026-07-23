@@ -17,8 +17,8 @@ a cargar el firmware de Reci.
 - Al menos una ronda etiquetada y revisada por cada clase.
 - Las fotos ordenadas localmente en `dataset-esp32cam/plastico/` y
   `dataset-esp32cam/vidrio/`.
-- Decisión registrada sobre el proveedor de visión a probar después
-  (Claude/OpenAI), sin cambiar producción durante la sesión.
+- Validación registrada de OpenAI, ya seleccionado como proveedor principal
+  local, sin cambiar el despliegue de producción durante la sesión.
 
 ## Antes de empezar — 15 minutos
 
@@ -137,8 +137,9 @@ condiciones.
 
 1. Ejecutar el modelo de RECI2 sobre las fotos recolectadas y calcular una
    matriz de confusión.
-2. Comparar Claude y OpenAI sobre un subconjunto fijo de fotos, registrando
-   precisión, latencia y costo estimado.
+2. Medir OpenAI sobre un subconjunto fijo de fotos, registrando precisión,
+   latencia y costo estimado. Consultar Claude solo para contrastar casos
+   ambiguos o fallos repetibles.
 3. Ajustar reglas o heurísticas únicamente cuando exista evidencia repetible
    en las fotos y en la tabla de validación.
 4. Si el modelo previo no se adapta a ESP32-CAM, preparar el

@@ -15,25 +15,23 @@ para la arquitectura completa y por qué está separado de Vercel.
 ```bash
 VISION_SERVICE_API_KEY=<secreto-compartido-con-la-web>
 
-# Proveedor de visión — igual que dev/RECI
-VISION_API=claude
-ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-6
-# Alternativa:
+# Proveedor principal del proyecto (Responses API):
+VISION_API=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.6-luna
+
+# Alternativas configurables:
+# VISION_API=claude
+# ANTHROPIC_API_KEY=sk-ant-...
+# CLAUDE_MODEL=claude-sonnet-4-6
 # VISION_API=gemini
 # GEMINI_API_KEY=...
-
-# Alternativa OpenAI (Responses API):
-# VISION_API=openai
-# OPENAI_API_KEY=...
-# OPENAI_MODEL=gpt-5.6-luna
 ```
 
-`CLAUDE_MODEL=claude-sonnet-4-6` es el recomendado — en `dev/RECI` (el
-prototipo del que sale este código) Haiku confundía latas con botellas y
-dudaba con Gatorade de vidrio; Sonnet clasificó 39/39 capturas reales sin
-error. Ver el changelog de `dev/RECI/README.md` (jul 2026) si hace falta el
-detalle.
+El proveedor principal se selecciona explícitamente con `VISION_API=openai`.
+Claude y Gemini se conservan como alternativas de diagnóstico; la decisión de
+mantener OpenAI debe validarse con las fotos reales de la ESP32-CAM mediante
+la plantilla de pruebas antes del despliegue.
 
 ## Desarrollo local
 

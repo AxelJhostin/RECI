@@ -42,10 +42,12 @@ Commits relacionados:
   ejecutó localmente en la Mac para desarrollo.
 - La clasificación actual usa un proveedor de visión para extraer atributos
   visuales, heurísticas OpenCV y el sistema experto de 193 reglas.
-- Se añadió OpenAI como proveedor opcional, sin eliminar Claude ni Gemini.
-  El proveedor se elige con variables de entorno y la respuesta se exige en
-  JSON estructurado antes de pasar al sistema experto.
-- La integración de OpenAI tiene **2/2 pruebas unitarias sin red**.
+- Se configuró OpenAI como proveedor principal local para las pruebas; Claude
+  y Gemini quedan disponibles como alternativas, sin eliminarse.
+- OpenAI responde mediante Responses API y la respuesta se exige en JSON
+  estructurado antes de pasar al sistema experto.
+- La integración de OpenAI tiene **3/3 pruebas unitarias sin red** y una
+  prueba real completada contra el endpoint local.
 
 Commit relacionado:
 
@@ -86,8 +88,8 @@ no conserva precisión con esa cámara, se reentrenará con un dataset propio.
 5. Integrar el modelo validado dentro de `ia/vision-service` como primer
    voto, conservando el sistema experto como decisión final y la API como
    respaldo para casos ambiguos.
-6. Comparar proveedores de visión con fotos reales (precisión, latencia y
-   costo) antes de activar uno en producción.
+6. Validar OpenAI con fotos reales (precisión, latencia y costo); usar Claude
+   o Gemini solo como comparación cuando aparezca un caso ambiguo.
 
 ## Coordinación requerida con Paula
 
@@ -107,5 +109,6 @@ esté encendida.
 1. Probar vidrio y plástico con cámara fija, luz estable y fondo simple.
 2. Guardar los resultados de cada intento en una tabla de validación.
 3. Habilitar la captura supervisada para comenzar el dataset.
-4. Con las primeras fotos, comparar el proveedor actual con OpenAI y decidir
-   con datos cuál se mantiene como principal.
+4. Validar OpenAI, ya seleccionado como proveedor principal local, con las
+   primeras fotos. Usar Claude solo como comparación si aparece un caso
+   ambiguo o un error repetible.
