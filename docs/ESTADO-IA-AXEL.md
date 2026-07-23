@@ -122,9 +122,40 @@ esté encendida.
 
 ## Próxima sesión propuesta (cuando vuelva a estar disponible la cámara)
 
-1. Probar vidrio y plástico con cámara fija, luz estable y fondo simple.
-2. Guardar los resultados de cada intento en una tabla de validación.
-3. Habilitar la captura supervisada para comenzar el dataset.
-4. Validar OpenAI, ya seleccionado como proveedor principal local, con las
-   primeras fotos. Usar Claude solo como comparación si aparece un caso
-   ambiguo o un error repetible.
+### Orden de trabajo
+
+1. **Arranque y conexión.** Conectar la ESP32-CAM, confirmar que obtiene una
+   IP y abrir la vista previa desde Safari. Anotar la IP de esa sesión, sin
+   convertirla en una configuración fija.
+2. **Prueba de salud.** Ejecutar una clasificación de plástico y otra de
+   vidrio con la cámara final. Confirmar en el monitor serial las tres
+   capturas, la respuesta del servicio y el voto mayoritario.
+3. **Validación controlada.** Probar objetos representativos con cámara fija,
+   iluminación estable y fondo sencillo. Registrar objeto, material real,
+   resultado de cada foto, resultado final, latencia y cualquier error HTTP.
+4. **Dataset supervisado.** Ejecutar el capturador separado de
+   `CamaraWebServer`: usar `P` para plástico y `V` para vidrio, comprobar la
+   vista en vivo y guardar las fotos en las carpetas de clase. Revisar que no
+   haya imágenes negras, duplicadas o desenfocadas antes de continuar.
+5. **Evaluación.** Separar las imágenes en entrenamiento, validación y
+   prueba; comparar el modelo de RECI2 con el proveedor OpenAI usando fotos
+   tomadas por la ESP32-CAM.
+6. **Decisión de modelo.** Solo si el modelo previo no se adapta a la cámara,
+   preparar reentrenamiento/transfer learning. Mantener el sistema experto
+   como decisión final conservadora.
+7. **Revisión con Paula.** Entregar la tabla de resultados, ejemplos de
+   aciertos/errores y métricas de precisión por clase para acordar umbrales y
+   siguientes cambios.
+8. **Despliegue posterior.** Cuando la validación sea aprobada, desplegar el
+   servicio de visión en un host persistente y configurar
+   `VISION_SERVICE_URL` y `VISION_SERVICE_API_KEY` en el entorno de la app.
+
+### Preparación que puede hacerse sin la cámara
+
+- Verificar que el capturador y sus carpetas de salida estén listos, sin
+  iniciar rondas de captura.
+- Mantener una tabla de validación vacía con las columnas del documento CSV.
+- Tener levantado el servicio de visión únicamente cuando se vaya a probar;
+  no es necesario dejarlo ejecutándose si la ESP32-CAM no está conectada.
+- No cambiar reglas por un solo objeto atípico: cualquier ajuste debe estar
+  respaldado por una prueba reproducible y revisarse con Paula.
