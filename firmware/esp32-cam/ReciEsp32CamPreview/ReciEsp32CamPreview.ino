@@ -22,6 +22,49 @@ namespace {
 
 httpd_handle_t previewServer = nullptr;
 
+// El firmware normal usa un solo framebuffer porque solo toma una foto cada
+// vez. La vista de Safari mantiene una captura activa, por lo que esta prueba
+// necesita dos buffers en la AI Thinker con PSRAM: uno para el stream y otro
+// para las tres fotos de C.
+bool restartCameraForPreview() {
+  esp_camera_deinit();
+
+  camera_config_t config{};
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = kCameraY2;
+  config.pin_d1 = kCameraY3;
+  config.pin_d2 = kCameraY4;
+  config.pin_d3 = kCameraY5;
+  config.pin_d4 = kCameraY6;
+  config.pin_d5 = kCameraY7;
+  config.pin_d6 = kCameraY8;
+  config.pin_d7 = kCameraY9;
+  config.pin_xclk = kCameraXclk;
+  config.pin_pclk = kCameraPclk;
+  config.pin_vsync = kCameraVsync;
+  config.pin_href = kCameraHref;
+  config.pin_sccb_sda = kCameraSiod;
+  config.pin_sccb_scl = kCameraSioc;
+  config.pin_pwdn = kCameraPwdn;
+  config.pin_reset = kCameraReset;
+  config.xclk_freq_hz = 20'000'000;
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.frame_size = psramFound() ? FRAMESIZE_VGA : FRAMESIZE_QVGA;
+  config.jpeg_quality = 12;
+  config.fb_count = psramFound() ? 2 : 1;
+  config.grab_mode = psramFound() ? CAMERA_GRAB_LATEST : CAMERA_GRAB_WHEN_EMPTY;
+
+  if (esp_camera_init(&config) != ESP_OK) {
+    Serial.println(F("ERROR: no se pudo reiniciar la camara para la vista previa"));
+    showOnLcd("Error de camara", "Revisa Reci");
+    return false;
+  }
+  Serial.println(psramFound() ? F("Vista previa: 2 buffers VGA")
+                               : F("AVISO: sin PSRAM, stream y C no son simultaneos"));
+  return true;
+}
+
 constexpr char kIndexHtml[] = R"HTML(
 <!doctype html>
 <html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -111,7 +154,7 @@ void startPreviewServer() {
 
 void setup() {
   reciClassificationSetup();
-  if (WiFi.status() == WL_CONNECTED) startPreviewServer();
+  if (WiFi.status() == WL_CONNECTED && restartCameraForPreview()) startPreviewServer();
 }
 
 void loop() {
