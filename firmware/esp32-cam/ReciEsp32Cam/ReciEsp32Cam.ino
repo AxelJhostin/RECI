@@ -1,9 +1,11 @@
 // Reci · ESP32-CAM AI Thinker · clasificación de residuos + saludo facial
 //
 // El Monitor Serial envía C para iniciar una lectura: la cámara toma tres
-// fotos con iluminación externa, el backend clasifica cada una y el Mega abre una compuerta
-// solo si existe una mayoría segura de plástico o vidrio. El resultado final
-// (ya votado) se registra una sola vez en recycle_events; si nadie fue
+// fotos con iluminación externa. Cada foto aporta un voto del proveedor y
+// otro del modelo local; el Mega abre una compuerta solo si existe una mayoría
+// simple priorizando la mayoría del proveedor y usando el modelo local como
+// respaldo. El resultado final (ya votado) se registra una sola vez en
+// recycle_events; si nadie fue
 // identificado, el Mega muestra en el OLED el QR para reclamar los puntos
 // desde la app — ver docs/DECISION-QR-RECLAMO.md.
 //
@@ -48,6 +50,13 @@ constexpr int kMegaTxPin = 14;
 constexpr unsigned long kMegaBaud = 9600;
 constexpr unsigned long kFlashWarmupMs = 220UL;
 constexpr unsigned long kCaptureIntervalMs = 350UL;
+// PUCEM_INVITADOS puede tardar más de 20 s en asignar la conexión a la placa.
+// CameraWebServer validó que esta misma red sí conecta si se le da más tiempo.
+constexpr unsigned long kWiFiConnectTimeoutMs = 60'000UL;
+// El backend puede esperar hasta 25 s al proveedor de visión. El valor por
+// defecto de HTTPClient (5 s) producía el error -11 aunque la foto sí se
+// hubiera enviado; dejamos un pequeño margen para la respuesta local.
+constexpr uint16_t kVisionHttpTimeoutMs = 30'000;
 constexpr uint8_t kCaptureCount = 3;
 constexpr char kBoundary[] = "ReciMaterialBoundary2026";
 
@@ -58,6 +67,7 @@ HardwareSerial mega(1);
 struct MaterialVotes {
   uint8_t plastico = 0;
   uint8_t vidrio = 0;
+  uint8_t abstenciones = 0;
   float plasticoConfidence = 0;
   float vidrioConfidence = 0;
 };
@@ -106,9 +116,13 @@ void showOnLcd(const String& firstLine, const String& secondLine) {
 
 bool connectWiFi() {
   WiFi.mode(WIFI_STA);
+  // En redes de campus la ESP32-CAM puede perder la asociación durante el
+  // ahorro de energía. La configuración coincide con CameraWebServer, que
+  // ya se validó con esta misma placa y red.
+  WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print(F("Conectando al Wi-Fi"));
-  const unsigned long deadline = millis() + 20'000UL;
+  const unsigned long deadline = millis() + kWiFiConnectTimeoutMs;
   while (WiFi.status() != WL_CONNECTED && static_cast<long>(millis() - deadline) < 0) {
     delay(300);
     Serial.print('.');
@@ -146,7 +160,9 @@ bool startCamera() {
   config.pin_reset = kCameraReset;
   config.xclk_freq_hz = 20'000'000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = psramFound() ? FRAMESIZE_VGA : FRAMESIZE_QVGA;
+  // QVGA (320x240) es suficiente para la clasificación de plástico/vidrio,
+  // acelera la transferencia al backend y deja más memoria libre.
+  config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 12;
   config.fb_count = 1;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
@@ -156,7 +172,7 @@ bool startCamera() {
     showOnLcd("Error de camara", "Revisa Reci");
     return false;
   }
-  Serial.println(psramFound() ? F("Camara en VGA") : F("AVISO: sin PSRAM, camara en QVGA"));
+  Serial.println(F("Camara en QVGA (optimizada)"));
   return true;
 }
 
@@ -186,6 +202,7 @@ String postClassify(camera_fb_t* frame, int& statusCode) {
     statusCode = -1;
     return "";
   }
+  http.setTimeout(kVisionHttpTimeoutMs);
   http.addHeader("Authorization", String("Bearer ") + RECI_ROBOT_API_KEY);
   http.addHeader("Content-Type", String("multipart/form-data; boundary=") + kBoundary);
   statusCode = http.sendRequest("POST", &payload, payload.totalLength());
@@ -201,14 +218,38 @@ void addVote(MaterialVotes& votes, const String& material, float confidence) {
   } else if (material == "vidrio") {
     ++votes.vidrio;
     votes.vidrioConfidence += confidence;
+  } else {
+    ++votes.abstenciones;
   }
 }
 
-String winningMaterial(const MaterialVotes& votes) {
-  if (votes.plastico < 2 && votes.vidrio < 2) return "desconocido";
+String majorityMaterial(const MaterialVotes& votes) {
+  const uint8_t totalValidVotes = votes.plastico + votes.vidrio;
+  // Una sola predicción nunca abre una compuerta. Desconocido es una
+  // abstención, así que no cuenta dentro de este mínimo ni rompe empates.
+  if (totalValidVotes < 2) return "desconocido";
   if (votes.plastico > votes.vidrio) return "plastico";
   if (votes.vidrio > votes.plastico) return "vidrio";
-  return votes.plasticoConfidence >= votes.vidrioConfidence ? "plastico" : "vidrio";
+  return "desconocido";
+}
+
+String chooseMaterial(const MaterialVotes& providerVotes,
+                      const MaterialVotes& localVotes,
+                      bool& usedProvider) {
+  const String providerMaterial = majorityMaterial(providerVotes);
+  if (providerMaterial != "desconocido") {
+    usedProvider = true;
+    return providerMaterial;
+  }
+
+  const String localMaterial = majorityMaterial(localVotes);
+  if (localMaterial != "desconocido") {
+    usedProvider = false;
+    return localMaterial;
+  }
+
+  usedProvider = false;
+  return "desconocido";
 }
 
 // Registra el resultado final (ya votado) en recycle_events — las 3 fotos
@@ -341,6 +382,8 @@ void classifyResidue() {
   sendMega("CMD:FACE:thinking");
   showOnLcd("Analizando residuo", "No lo retires");
   MaterialVotes votes;
+  MaterialVotes providerVotes;
+  MaterialVotes localVotes;
 
   for (uint8_t index = 0; index < kCaptureCount; ++index) {
     camera_fb_t* frame = captureIlluminatedFrame();
@@ -360,14 +403,73 @@ void classifyResidue() {
       Serial.printf("ERROR: JSON invalido en foto %u\n", index + 1);
       continue;
     }
-    const String material = document["material"].as<String>();
-    const float confidence = document["confidence"] | 0.0F;
-    addVote(votes, material, confidence);
-    Serial.printf("foto %u: %s (%.2f)\n", index + 1, material.c_str(), confidence);
+    // Cada respuesta trae los votos independientes de la misma foto. No se
+    // fusionan aquí: tras tres fotos, el firmware decide con hasta seis votos.
+    JsonArrayConst photoVotes = document["vision_votes"].as<JsonArrayConst>();
+    uint8_t receivedVotes = 0;
+    String providerMaterial = "no_disponible";
+    float providerConfidence = 0.0F;
+    String localMaterial = "no_disponible";
+    float localConfidence = 0.0F;
+    for (JsonVariantConst vote : photoVotes) {
+      const String source = vote["source"].as<String>();
+      const String voteMaterial = vote["material"].as<String>();
+      const float voteConfidence = vote["confidence"] | 0.0F;
+      addVote(votes, voteMaterial, voteConfidence);
+      if (source == "openai_sistema_experto") {
+        addVote(providerVotes, voteMaterial, voteConfidence);
+      } else if (source == "modelo_local") {
+        addVote(localVotes, voteMaterial, voteConfidence);
+      }
+      ++receivedVotes;
+
+      if (source == "openai_sistema_experto") {
+        providerMaterial = voteMaterial;
+        providerConfidence = voteConfidence;
+      } else if (source == "modelo_local") {
+        localMaterial = voteMaterial;
+        localConfidence = voteConfidence;
+      }
+    }
+
+    // Compatibilidad con un servicio de visión anterior durante un despliegue
+    // gradual: si no envía vision_votes, conserva su único resultado.
+    if (receivedVotes == 0) {
+      const String material = document["material"].as<String>();
+      const float confidence = document["confidence"] | 0.0F;
+      addVote(votes, material, confidence);
+      addVote(providerVotes, material, confidence);
+      Serial.printf("foto %u: respaldo=%s (%.2f)\n", index + 1, material.c_str(), confidence);
+    } else {
+      Serial.printf(
+          "foto %u: OpenAI=%s (%.2f) | modelo=%s (%.2f)\n",
+          index + 1,
+          providerMaterial.c_str(),
+          providerConfidence,
+          localMaterial.c_str(),
+          localConfidence);
+    }
     if (index + 1 < kCaptureCount) delay(kCaptureIntervalMs);
   }
 
-  const String material = winningMaterial(votes);
+  Serial.printf(
+      "Votos validos: plastico=%u | vidrio=%u | abstenciones=%u\n",
+      votes.plastico,
+      votes.vidrio,
+      votes.abstenciones);
+  Serial.printf(
+      "Votos OpenAI: plastico=%u | vidrio=%u | abstenciones=%u\n",
+      providerVotes.plastico,
+      providerVotes.vidrio,
+      providerVotes.abstenciones);
+  Serial.printf(
+      "Votos modelo: plastico=%u | vidrio=%u | abstenciones=%u\n",
+      localVotes.plastico,
+      localVotes.vidrio,
+      localVotes.abstenciones);
+
+  bool usedProvider = false;
+  const String material = chooseMaterial(providerVotes, localVotes, usedProvider);
   if (material == "desconocido") {
     Serial.println(F("Resultado: DESCONOCIDO (sin mayoria segura)"));
     sendMega("CMD:FACE:confused");
@@ -378,9 +480,18 @@ void classifyResidue() {
   Serial.print(F("Resultado final: "));
   Serial.println(material);
 
+  Serial.print(F("Regla de decision: "));
+  Serial.println(usedProvider ? F("mayoria OpenAI/sistema experto")
+                              : F("respaldo por mayoria del modelo local"));
+
+  const MaterialVotes& winningVotes = usedProvider ? providerVotes : localVotes;
   const float winningConfidence = material == "plastico"
-      ? (votes.plastico > 0 ? votes.plasticoConfidence / votes.plastico : 0.0F)
-      : (votes.vidrio > 0 ? votes.vidrioConfidence / votes.vidrio : 0.0F);
+      ? (winningVotes.plastico > 0
+          ? winningVotes.plasticoConfidence / winningVotes.plastico
+          : 0.0F)
+      : (winningVotes.vidrio > 0
+          ? winningVotes.vidrioConfidence / winningVotes.vidrio
+          : 0.0F);
   const String claimCode = recordRecycleEvent(material, winningConfidence);
 
   sendMega("CMD:CLASSIFY:" + material);

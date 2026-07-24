@@ -424,6 +424,15 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         "botella_jugo_plastico", "desconocido",
     )
     api_dice_transparente_pero_no_lo_es = trans in ("alta", "media") and es_opaco_real
+    # Una botella reconocida con cuello/tapa de rosca y cuerpo transparente
+    # no es una lata. Las etiquetas coloridas pueden volver opaca una gran
+    # parte de la imagen y la geometría global por sí sola no es evidencia de
+    # metal (regresión observada con botellas PET de Sprite).
+    api_pet_con_rosca_visible = (
+        api_dice_botella
+        and tapa == "rosca_plastico"
+        and trans in ("alta", "media")
+    )
 
     forma_lata = (
         cap > 0.06
@@ -533,14 +542,21 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         # TM muy seguro de plástico: solo forzar lata si API contradice transparencia
         parece_lata = (
             obj == "lata"
-            or (api_dice_transparente_pero_no_lo_es and forma_lata and aspect < 1.40)
+            or (
+                not api_pet_con_rosca_visible
+                and api_dice_transparente_pero_no_lo_es
+                and forma_lata
+                and aspect < 1.40
+            )
         )
     else:
         parece_lata = (
             obj == "lata"
-            or (metal_plateado and clase_tm != "vidrio")
-            or metal_mate
+            or (not api_pet_con_rosca_visible and metal_plateado and clase_tm != "vidrio")
+            or (not api_pet_con_rosca_visible and metal_mate)
             or (
+                not api_pet_con_rosca_visible
+                and
                 forma_lata
                 and clase_tm != "vidrio"
                 and (
@@ -548,7 +564,6 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
                     or metal_mate
                     or api_dice_transparente_pero_no_lo_es
                     or (trans in ("ninguna", "baja", "media") and tapa in ("rosca_plastico", "sin_tapa", "sellado") and aspect < 1.35)
-                    or (sat > 45 and es_opaco_real and api_dice_botella and aspect < 1.35)
                 )
             )
         )
@@ -571,7 +586,12 @@ def refinar_atributos_api(atributos: dict, img_bgr: np.ndarray,
         return _aplicar_veto_consenso_api(
             atributos_originales, out, tm_seguro_plastico, clase_tm, prob_tm)
 
-    if api_dice_transparente_pero_no_lo_es and api_dice_botella and forma_lata:
+    if (
+        not api_pet_con_rosca_visible
+        and api_dice_transparente_pero_no_lo_es
+        and api_dice_botella
+        and forma_lata
+    ):
         out.update({
             "objeto_reconocido": "lata",
             "transparencia":     "ninguna",

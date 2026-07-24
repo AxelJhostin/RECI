@@ -15,11 +15,11 @@ ESP32-CAM captura imagen
 Next.js valida auth del robot (ROBOT_API_KEY) y reenvía la imagen
     ↓  POST /v1/classify  (x-vision-service-key)
 ia/vision-service:
-    1. Claude o Gemini extrae 9 atributos visuales (objeto, transparencia,
+    1. OpenAI extrae 9 atributos visuales (objeto, transparencia,
        color, forma, brillo, tapa, textura, rigidez, confianza)
     2. Heurísticas OpenCV refinan los atributos (corrige lata/vidrio/metal
        mal etiquetados)
-    3. Sistema experto (174 reglas, CF MYCIN, meta-reglas, forward +
+    3. Sistema experto (193 reglas, CF MYCIN, meta-reglas, forward +
        backward chaining) decide la conclusión
     ↓
 { material: "vidrio"|"plastico"|"desconocido", confidence, rule_applied }
@@ -33,11 +33,12 @@ ESP32-CAM reenvía la decisión por UART → Arduino Mega
 
 - `main.py` — endpoint FastAPI (`/v1/classify`), auth, mapeo de la conclusión
   del sistema experto (5 categorías) al `MaterialType` de la app (3).
-- `vision/classifier.py` — llamada a Claude/Gemini + el prompt de
+- `vision/classifier.py` — llamada a OpenAI (Claude/Gemini quedan como
+  alternativas configurables) + el prompt de
   clasificación (afinado contra capturas reales del campus).
 - `vision/visual_heuristics.py` — heurísticas OpenCV, portadas sin cambios.
-- `expert_system/` — las 174 reglas, CF MYCIN, meta-reglas, backward
-  chaining, portadas sin cambios desde `dev/RECI`.
+- `expert_system/` — las 193 reglas, CF MYCIN, meta-reglas, backward
+  chaining y correcciones portadas desde RECI2.
 
 Ver [`ia/vision-service/README.md`](vision-service/README.md) para correrlo
 local, variables de entorno y qué se portó de `dev/RECI` vs. qué falta.
@@ -51,7 +52,7 @@ Ver [`docs/DECISION-SERVICIO-FACIAL.md`](../docs/DECISION-SERVICIO-FACIAL.md).
 
 - **Dataset propio de la ESP32-CAM** (≥500 fotos/clase) para entrenar un
   MobileNetV2 que corra como primer voto dentro de `vision-service` — mismo
-  patrón híbrido de `dev/RECI` (TM da contexto → Claude/Gemini decide), sin
+  patrón híbrido de `dev/RECI` (TM da contexto → proveedor de visión decide), sin
   depender de exportarlo a TF.js/ONNX ni de correrlo en Vercel.
 - Triple captura + voto mayoritario desde la ESP32-CAM (ver "Próximos
   pasos" en `ia/vision-service/README.md`).

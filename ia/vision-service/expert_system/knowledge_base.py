@@ -630,9 +630,10 @@ class KnowledgeBase:
                  "Ancho colorido semitransparente con tapa rosca → Gatorade o bebida deportiva plástica"),
 
             Rule("R136", {"objeto_reconocido": "botella_gatorade",
-                          "forma": "cilindrica_ancha", "tapa": "rosca_plastico"},
+                          "forma": "cilindrica_ancha", "tapa": "rosca_plastico",
+                          "brillo": "medio_difuso"},
                  "PLASTICO", 0.97,
-                 "Gatorade boca ancha con tapa rosca → plástico PET deportivo"),
+                 "Gatorade boca ancha con tapa rosca y brillo difuso → plástico PET deportivo"),
 
             # ── 220V — energizante ecuatoriano amarillo/verde ────────────────
             # Delgado, muy colorido, etiqueta amarilla/verde intensa

@@ -1,10 +1,11 @@
 """Servicio de clasificación de residuos de Reci (vidrio / plástico / desconocido).
 
 Recibe una imagen capturada por la ESP32-CAM (reenviada por el backend
-Next.js), llama a Claude o Gemini para extraer 9 atributos visuales del
-objeto, los refina con heurísticas OpenCV, y corre el sistema experto (174
-reglas, CF MYCIN, meta-reglas, forward + backward chaining) para decidir el
-material. No persiste imágenes ni atributos — cada petición es independiente.
+Next.js), ejecuta el MobileNetV2 local y llama al proveedor configurado para
+extraer 9 atributos visuales. Después refina esos atributos con OpenCV, corre
+el sistema experto y emite dos votos independientes por foto. La ESP32-CAM
+reúne los votos de las tres capturas. No persiste imágenes ni atributos — cada
+petición es independiente.
 
 Ver docs/DECISION-SERVICIO-VISION.md para la arquitectura completa.
 """
@@ -28,6 +29,8 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 
 from expert_system.inference_engine import InferenceEngine
 from vision.classifier import VisionClassifier, VisionProviderError
+from vision.local_model import LocalMaterialClassifier
+from vision.voting import build_photo_votes
 
 load_dotenv()
 
@@ -50,7 +53,13 @@ app = FastAPI(title=APP_NAME, version="1.0.0", docs_url=None, redoc_url=None)
 
 _classifier: VisionClassifier | None = None
 _classifier_error: str | None = None
+_local_classifier: LocalMaterialClassifier | None = None
+_local_classifier_error: str | None = None
 
+
+LOCAL_MODEL_ENABLED = os.getenv("LOCAL_MODEL_ENABLED", "true").lower() not in {
+    "0", "false", "no", "off",
+}
 try:
     _classifier = VisionClassifier()
     logger.info("VisionClassifier listo | proveedor=%s modelo=%s",
@@ -58,6 +67,18 @@ try:
 except ValueError as exc:
     _classifier_error = str(exc)
     logger.error("VisionClassifier no se pudo inicializar: %s", exc)
+
+if LOCAL_MODEL_ENABLED:
+    try:
+        _local_classifier = LocalMaterialClassifier()
+    except (FileNotFoundError, ImportError, RuntimeError, ValueError) as exc:
+        _local_classifier_error = str(exc)
+        logger.warning(
+            "Modelo local no disponible; se conserva el flujo del proveedor: %s",
+            exc,
+        )
+else:
+    _local_classifier_error = "desactivado por LOCAL_MODEL_ENABLED"
 
 
 def require_service_key(x_vision_service_key: Annotated[Optional[str], Header()] = None) -> None:
@@ -81,6 +102,22 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "proveedor": _classifier.proveedor_label,
         "modelo": _classifier.modelo_primario,
+        "modelo_local": {
+            "enabled": LOCAL_MODEL_ENABLED,
+            "available": _local_classifier is not None,
+            "file": (
+                _local_classifier.model_path.name if _local_classifier is not None else None
+            ),
+            "runtime": (
+                _local_classifier.runtime if _local_classifier is not None else None
+            ),
+            "error": _local_classifier_error,
+        },
+        "votacion": {
+            "capturas_por_residuo": 3,
+            "votos_por_captura": "proveedor y modelo local",
+            "decision": "mayoria_simple_en_firmware",
+        },
         "advertencias": _classifier.advertencias,
     }
 
@@ -99,7 +136,7 @@ async def classify(image: Annotated[UploadFile, File(...)]) -> dict[str, Any]:
 
     # Falla rápido si la imagen está corrupta, antes de gastar una llamada
     # a la API de visión.
-    decode_image(raw)
+    decoded_image = decode_image(raw)
 
     try:
         atributos = _classifier.clasificar(raw, image.content_type)
@@ -114,18 +151,36 @@ async def classify(image: Annotated[UploadFile, File(...)]) -> dict[str, Any]:
     engine.cargar_hechos(atributos)
     conclusion, confianza, reglas = engine.ejecutar()
 
-    material = _MATERIAL_MAP.get(conclusion, "desconocido")
+    provider_material = _MATERIAL_MAP.get(conclusion, "desconocido")
     rule_applied = f"{conclusion} · {len(reglas)} regla(s) · CF {confianza:.2f}"
     if engine.motivo_rechazo_conservador:
         rule_applied += f" · {engine.motivo_rechazo_conservador}"
 
+    local_result = None
+    if _local_classifier is not None:
+        try:
+            local_result = _local_classifier.predict(decoded_image)
+        except Exception:
+            # La API y el sistema experto siguen siendo el flujo estable. Un
+            # fallo local se registra, pero no tumba la clasificación.
+            logger.exception("fallo del modelo local; se usa solo el proveedor")
+
+    photo_votes = build_photo_votes(provider_material, confianza, local_result)
+
     logger.info(
-        "clasificacion | objeto=%s conclusion=%s material=%s confianza=%.2f proveedor=%s",
-        atributos.get("objeto_reconocido"), conclusion, material, confianza, _classifier.vision_api,
+        "clasificacion | proveedor=%s(%.2f) local=%s(%s) votos=%s",
+        provider_material,
+        confianza,
+        local_result.get("material") if local_result else "no_disponible",
+        f"{local_result.get('confidence', 0):.2f}" if local_result else "-",
+        ",".join(str(vote["material"]) for vote in photo_votes),
     )
 
     return {
-        "material": material,
+        # Se mantiene este contrato para clientes que hacen una sola llamada.
+        # La ESP32-CAM no lo usa como decisión final: reúne vision_votes de
+        # tres fotos y ejecuta la mayoría de seis votos en el firmware.
+        "material": provider_material,
         "confidence": round(confianza, 4),
         "rule_applied": rule_applied,
         "conclusion_se": conclusion,
@@ -133,4 +188,10 @@ async def classify(image: Annotated[UploadFile, File(...)]) -> dict[str, Any]:
         "reglas_disparadas": len(reglas),
         "vision_proveedor": _classifier.vision_api,
         "vision_modelo": _classifier.modelo_primario,
+        "vision_provider_result": {
+            "material": provider_material,
+            "confidence": round(confianza, 4),
+        },
+        "vision_local_result": local_result,
+        "vision_votes": photo_votes,
     }

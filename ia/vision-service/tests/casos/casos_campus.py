@@ -213,6 +213,16 @@ CASOS_CAMPUS = [
         }
     },
     {
+        "id": "TC17c2b", "nombre": "Gatorade vidrio ancho — rosca mal leída no debe activar PET",
+        "esperado": "VIDRIO", "categoria": "CAMPUS_VIDRIO",
+        "atributos": {
+            "objeto_reconocido": "botella_gatorade", "confianza_ml": "alta",
+            "transparencia": "alta", "color": "transparente",
+            "forma": "cilindrica_ancha", "brillo": "alto_nitido",
+            "tapa": "rosca_plastico", "textura": "lisa_brillante", "rigidez": "rigido"
+        }
+    },
+    {
         "id": "TC17c3", "nombre": "Gatorade PET — brillo difuso + rosca (no confundir con vidrio)",
         "esperado": "PLASTICO", "categoria": "CAMPUS_PLASTICO",
         "atributos": {

@@ -6,8 +6,10 @@
 ## Decisión
 
 La clasificación vidrio/plástico de Reci se implementa como un servicio
-privado en Python, FastAPI, Claude/Gemini (vision) y el sistema experto de
-Reci (174 reglas, CF MYCIN, meta-reglas, forward + backward chaining). La app
+privado en Python, FastAPI, el MobileNetV2/TFLite entrenado por Axel, OpenAI
+(vision) y el sistema experto de Reci (193 reglas, CF MYCIN, meta-reglas,
+forward + backward chaining). Claude y Gemini quedan como alternativas
+configurables. La app
 Next.js conserva el contrato HTTP, la autenticación del robot y la
 persistencia en Supabase; la ESP32-CAM solo captura la imagen y se comunica
 con la API del robot. Mismo patrón que `face-service` (ver
@@ -22,16 +24,17 @@ con la ESP32-CAM que todavía no existe — es, según el propio plan, "el
 bloqueante más grande para el Flujo A".
 
 Existe un prototipo (`dev/RECI`, repo separado) con exactamente esta pieza ya
-construida y probada: sistema experto de 174 reglas con 110/110 pruebas
+construida y probada: sistema experto que luego se amplió a 193 reglas con
+118/118 pruebas
 formales, y una integración con Claude vision cuyo prompt fue afinado contra
 capturas reales del campus hasta resolver 39/39 sin error (ver el changelog
 de `dev/RECI/README.md`, jul 2026). Reutilizar ese código en un servicio
-aislado da clasificación real esta semana, sin esperar al dataset ni a la
-conversión de modelo. El MobileNetV2 propio puede seguir desarrollándose en
-paralelo (ver "Próximos pasos" en `ia/vision-service/README.md`) como
-optimización de costo/latencia, sin bloquear el Flujo A mientras tanto.
+aislado dio clasificación real sin esperar al dataset nuevo. Después se portó
+el MobileNetV2/TFLite ya entrenado en RECI2 para compararlo con el proveedor
+sobre las mismas fotos. El dataset nuevo de la ESP32-CAM se usará primero
+para evaluar esta integración y solo después, si hace falta, para fine-tuning.
 
-Incluir el modelo o las llamadas a Claude/Gemini directamente en el Route
+Incluir el modelo o las llamadas al proveedor de visión directamente en el Route
 Handler de Vercel tampoco es apropiado: son llamadas de red con reintentos
 que pueden tardar varios segundos, y mezclar esa lógica con la ruta HTTP que
 sirve a la ESP32-CAM la vuelve más frágil y difícil de versionar por
@@ -40,14 +43,25 @@ separado del resto de la web.
 ## Arquitectura
 
 ```text
-ESP32-CAM -> POST /api/vision/classify -> Vision Service /v1/classify
-                                        -> Claude/Gemini (9 atributos visuales)
-                                        -> heurísticas OpenCV (refina lata/vidrio/metal)
-                                        -> Sistema Experto (174 reglas, CF MYCIN)
-                                       <-  { material, confidence, rule_applied }
+ESP32-CAM -> 3 fotos -> POST /api/vision/classify -> Vision Service /v1/classify
+                            cada foto -> MobileNetV2 local (plástico/vidrio)
+                                      -> OpenAI (9 atributos visuales)
+                                      -> heurísticas OpenCV
+                                      -> Sistema Experto (193 reglas, CF MYCIN)
+                                      -> voto del proveedor + voto del modelo
+                                     <- resultado base + votos de ambos
                        Supabase (recycle_events) <- si material != desconocido
 ESP32-CAM <- { material, confidence, rule_applied } -> reenvía CMD:OPEN:<material> al Arduino Mega
 ```
+
+Las tres fotos generan seis predicciones comparables porque ambos modelos
+analizan las mismas imágenes. La ESP32-CAM conserva los seis diagnósticos, pero
+decide primero con la mayoría interna de OpenAI+sistema experto. Si OpenAI no
+logra mayoría, consulta la mayoría del modelo local; un empate global 3–3 se
+resuelve a favor de OpenAI cuando este tiene mayoría interna. `desconocido` es
+abstención y, si ninguna señal tiene mayoría estricta, no se abre la
+compuerta. Esta configuración se valida solo con objetos de plástico o vidrio
+porque el modelo local binario no reconoce latas, orgánicos ni cartón.
 
 El servicio de visión no guarda fotos ni atributos: cada petición es
 independiente. El log queda en la salida estándar del contenedor (no en
@@ -57,11 +71,11 @@ contenedor.
 ## Qué se reutilizó de `dev/RECI` y qué no
 
 Ver la tabla completa en [`ia/vision-service/README.md`](../ia/vision-service/README.md#qué-se-portó-de-devreci-y-qué-no).
-Resumen: `expert_system/` se copió sin cambios; la llamada a Claude/Gemini y
-el prompt se reescribieron en `vision/classifier.py` sin el contexto de un
-clasificador local (no hay TM en la ESP32-CAM); no se portó `camera.py`
-(captura ahora vive en el firmware) ni el log a archivo (reemplazado por
-`logging` a stdout).
+Resumen: `expert_system/` se portó y amplió; la llamada al proveedor de visión
+se reescribió en `vision/classifier.py`; el MobileNetV2 se portó como
+clasificador independiente en `vision/local_model.py`; y los votos por foto
+se construyen en `vision/voting.py`. No se portó `camera.py` porque la captura ahora vive en el
+firmware, ni el log a archivo porque fue reemplazado por `logging` a stdout.
 
 ## Seguridad
 
@@ -86,9 +100,9 @@ VISION_SERVICE_API_KEY=<secreto-compartido>
 
 ```bash
 VISION_SERVICE_API_KEY=<mismo-secreto-compartido>
-VISION_API=claude
-ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-6
+VISION_API=openai
+OPENAI_API_KEY=<clave-local-o-del-host>
+OPENAI_MODEL=gpt-5.6-luna
 ```
 
 ## Contrato de clasificación

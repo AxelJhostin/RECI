@@ -3,9 +3,10 @@
 # y los refina con heurísticas OpenCV (vision/visual_heuristics.py).
 #
 # Adaptado de dev/RECI (vision/attribute_extractor.py). Diferencias:
-# - Sin contexto de un clasificador TM local (la ESP32-CAM no corre ningún
-#   modelo — ver docs/DECISION-SERVICIO-VISION.md) — se usa el prompt base
-#   directo, sin la sección "CONTEXTO DEL CLASIFICADOR RÁPIDO".
+# - El proveedor se mantiene independiente del clasificador TFLite local:
+#   ambos analizan la misma foto y main.py emite sus votos por separado.
+#   Esto permite medir seis predicciones reales por depósito sin que una
+#   señal contamine a la otra.
 # - Sin lógica de cámara/hilo — este servicio es un endpoint HTTP síncrono.
 # - Reintentos recortados (esta llamada ahora es parte de una cadena en vivo
 #   ESP32-CAM → Next.js → aquí → Claude/Gemini; cada reintento le suma
@@ -164,6 +165,32 @@ _GENERATION_CONFIG = {
 MAX_REINTENTOS = 1
 TIMEOUT_SEGUNDOS = 20.0
 
+# Veto aislado para la integración OpenAI. La heurística compartida puede
+# convertir una botella colorida en "lata" por su geometría/etiqueta; si la
+# propia API entregó señales fuertes de PET, conservamos esa lectura sin
+# modificar visual_heuristics.py ni el flujo de Claude/Gemini.
+_OPENAI_PET_OBJECTS = frozenset({
+    "botella_agua", "botella_gaseosa", "botella_energizante",
+    "botella_jugo_plastico", "botella_fioravanti", "botella_cola_gallito",
+})
+
+
+def _revocar_falso_lata_openai(original: dict, refinado: dict) -> dict:
+    if refinado.get("objeto_reconocido") != "lata":
+        return refinado
+    if original.get("objeto_reconocido") not in _OPENAI_PET_OBJECTS:
+        return refinado
+    if original.get("tapa") != "rosca_plastico":
+        return refinado
+    if original.get("transparencia") not in ("alta", "media"):
+        return refinado
+
+    logger.warning(
+        "veto OpenAI: heurística convirtió botella PET en lata | objeto=%s",
+        original.get("objeto_reconocido"),
+    )
+    return original
+
 
 class VisionClassifier:
     """Llama a un proveedor y devuelve los 9 atributos, refinados con OpenCV."""
@@ -197,6 +224,21 @@ class VisionClassifier:
             if inicio != -1 and fin > inicio:
                 return json.loads(texto[inicio:fin])
             raise
+
+    @staticmethod
+    def _extraer_texto_openai(respuesta: dict) -> str:
+        """Extrae texto de Responses API, incluso si no entrega output_text resumido."""
+        texto = (respuesta.get("output_text") or "").strip()
+        if texto:
+            return texto
+
+        for salida in respuesta.get("output", []):
+            if salida.get("type") != "message":
+                continue
+            for contenido in salida.get("content", []):
+                if contenido.get("type") == "output_text" and contenido.get("text"):
+                    return contenido["text"].strip()
+        raise ValueError("OpenAI: respuesta sin texto de salida")
 
     def _payload_gemini(self, imagen_b64: str, mime_type: str) -> dict:
         return {
@@ -320,9 +362,7 @@ class VisionClassifier:
                             json=self._payload_openai(imagen_b64, mime_type, modelo),
                         )
                     response.raise_for_status()
-                    texto = response.json().get("output_text", "").strip()
-                    if not texto:
-                        raise ValueError("OpenAI: respuesta sin output_text")
+                    texto = self._extraer_texto_openai(response.json())
                     logger.info("vision openai ok | modelo=%s", modelo)
                     return texto
                 except httpx.HTTPStatusError as e:
@@ -344,10 +384,9 @@ class VisionClassifier:
         Recibe los bytes crudos de la imagen (JPEG/PNG/WebP) y devuelve los
         9 atributos visuales, ya refinados con OpenCV (lata, vidrio, metal).
 
-        Lanza VisionProviderError si el proveedor no responde — sin
-        clasificador local de respaldo en este servicio (ver
-        docs/DECISION-SERVICIO-VISION.md), así que el llamador debe tratarlo
-        como "sin clasificación posible" en vez de reintentar indefinidamente.
+        Lanza VisionProviderError si el proveedor no responde. El modelo local
+        es binario y no reconoce objetos rechazables (lata, orgánico, cartón),
+        así que no abre una compuerta por sí solo cuando el proveedor falla.
         """
         imagen_b64 = base64.b64encode(imagen_bytes).decode("utf-8")
 
@@ -359,9 +398,13 @@ class VisionClassifier:
             texto = self._llamar_openai(imagen_b64, mime_type)
 
         atributos = self._parsear_json(texto)
+        atributos_originales = dict(atributos)
 
         img_bgr = cv2.imdecode(np.frombuffer(imagen_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img_bgr is not None:
             atributos = refinar_atributos_api(atributos, img_bgr, clase_tm=None, prob_tm=None)
+
+        if self.vision_api == "openai":
+            atributos = _revocar_falso_lata_openai(atributos_originales, atributos)
 
         return atributos

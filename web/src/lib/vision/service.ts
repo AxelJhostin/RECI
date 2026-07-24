@@ -2,14 +2,33 @@ import type { MaterialType } from '@/lib/supabase/types'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
+export type VisionVote = {
+  source: 'openai_sistema_experto' | 'modelo_local'
+  material: MaterialType
+  confidence: number
+  counts_as_vote: boolean
+}
+
 export type VisionClassifyResult = {
   material: MaterialType
   confidence: number
   rule_applied: string
+  vision_provider_result?: {
+    material: MaterialType
+    confidence: number
+  }
+  vision_local_result?: {
+    material: 'vidrio' | 'plastico'
+    confidence: number
+    probabilities?: Record<string, number>
+    model?: string
+  } | null
+  vision_votes?: VisionVote[]
 }
 
-// Llama a ia/vision-service (Claude/Gemini + heurísticas OpenCV + sistema
-// experto). Ver docs/DECISION-SERVICIO-VISION.md para la arquitectura.
+// Llama a ia/vision-service (proveedor + MobileNetV2 + heurísticas OpenCV +
+// sistema experto). La ESP32-CAM reúne los votos de ambas señales.
+// Ver docs/DECISION-SERVICIO-VISION.md.
 export async function classifyMaterial(image: File): Promise<VisionClassifyResult> {
   if (!ALLOWED_TYPES.includes(image.type)) throw new Error('Solo se aceptan imágenes JPEG, PNG o WebP')
 
@@ -45,6 +64,9 @@ export async function classifyMaterial(image: File): Promise<VisionClassifyResul
   const material = (body as { material?: unknown }).material
   const confidence = (body as { confidence?: unknown }).confidence
   const ruleApplied = (body as { rule_applied?: unknown }).rule_applied
+  const providerResult = (body as { vision_provider_result?: unknown }).vision_provider_result
+  const localResult = (body as { vision_local_result?: unknown }).vision_local_result
+  const rawVotes = (body as { vision_votes?: unknown }).vision_votes
 
   if (material !== 'vidrio' && material !== 'plastico' && material !== 'desconocido') {
     throw new Error('El servicio de visión devolvió un material inválido')
@@ -53,9 +75,75 @@ export async function classifyMaterial(image: File): Promise<VisionClassifyResul
     throw new Error('El servicio de visión devolvió una confianza inválida')
   }
 
-  return {
+  const result: VisionClassifyResult = {
     material,
     confidence,
     rule_applied: typeof ruleApplied === 'string' ? ruleApplied : 'desconocido',
   }
+
+  if (providerResult && typeof providerResult === 'object') {
+    const providerMaterial = (providerResult as { material?: unknown }).material
+    const providerConfidence = (providerResult as { confidence?: unknown }).confidence
+    if (
+      (providerMaterial === 'vidrio' || providerMaterial === 'plastico' || providerMaterial === 'desconocido')
+      && typeof providerConfidence === 'number'
+      && Number.isFinite(providerConfidence)
+    ) {
+      result.vision_provider_result = {
+        material: providerMaterial,
+        confidence: providerConfidence,
+      }
+    }
+  }
+
+  if (localResult === null) {
+    result.vision_local_result = null
+  } else if (localResult && typeof localResult === 'object') {
+    const localMaterial = (localResult as { material?: unknown }).material
+    const localConfidence = (localResult as { confidence?: unknown }).confidence
+    const probabilities = (localResult as { probabilities?: unknown }).probabilities
+    const model = (localResult as { model?: unknown }).model
+    if (
+      (localMaterial === 'vidrio' || localMaterial === 'plastico')
+      && typeof localConfidence === 'number'
+      && Number.isFinite(localConfidence)
+    ) {
+      result.vision_local_result = {
+        material: localMaterial,
+        confidence: localConfidence,
+        ...(probabilities && typeof probabilities === 'object'
+          ? { probabilities: probabilities as Record<string, number> }
+          : {}),
+        ...(typeof model === 'string' ? { model } : {}),
+      }
+    }
+  }
+
+  if (Array.isArray(rawVotes)) {
+    const votes: VisionVote[] = rawVotes.flatMap((rawVote): VisionVote[] => {
+      if (!rawVote || typeof rawVote !== 'object') return []
+      const source = (rawVote as { source?: unknown }).source
+      const voteMaterial = (rawVote as { material?: unknown }).material
+      const voteConfidence = (rawVote as { confidence?: unknown }).confidence
+      const countsAsVote = (rawVote as { counts_as_vote?: unknown }).counts_as_vote
+      if (
+        (source === 'openai_sistema_experto' || source === 'modelo_local')
+        && (voteMaterial === 'vidrio' || voteMaterial === 'plastico' || voteMaterial === 'desconocido')
+        && typeof voteConfidence === 'number'
+        && Number.isFinite(voteConfidence)
+        && typeof countsAsVote === 'boolean'
+      ) {
+        return [{
+          source: source as VisionVote['source'],
+          material: voteMaterial as VisionVote['material'],
+          confidence: voteConfidence,
+          counts_as_vote: countsAsVote,
+        }]
+      }
+      return []
+    })
+    if (votes.length > 0) result.vision_votes = votes
+  }
+
+  return result
 }
