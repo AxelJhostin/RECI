@@ -1,9 +1,10 @@
 // Reci · ESP32-CAM AI Thinker · clasificación de residuos
 //
 // El Monitor Serial envía C para iniciar una lectura: la cámara toma tres
-// fotos con iluminación externa, el backend clasifica cada una y el Mega abre una compuerta
-// solo si existe una mayoría segura de plástico o vidrio. El resultado final
-// (ya votado) se registra una sola vez en recycle_events; si nadie fue
+// fotos con iluminación externa. Cada foto aporta un voto del proveedor y
+// otro del modelo local; el Mega abre una compuerta solo si existe una mayoría
+// simple entre los hasta seis votos válidos. El resultado final (ya votado) se
+// registra una sola vez en recycle_events; si nadie fue
 // identificado, el Mega muestra en el OLED el QR para reclamar los puntos
 // desde la app — ver docs/DECISION-QR-RECLAMO.md.
 
@@ -57,6 +58,7 @@ HardwareSerial mega(1);
 struct MaterialVotes {
   uint8_t plastico = 0;
   uint8_t vidrio = 0;
+  uint8_t abstenciones = 0;
   float plasticoConfidence = 0;
   float vidrioConfidence = 0;
 };
@@ -207,14 +209,19 @@ void addVote(MaterialVotes& votes, const String& material, float confidence) {
   } else if (material == "vidrio") {
     ++votes.vidrio;
     votes.vidrioConfidence += confidence;
+  } else {
+    ++votes.abstenciones;
   }
 }
 
 String winningMaterial(const MaterialVotes& votes) {
-  if (votes.plastico < 2 && votes.vidrio < 2) return "desconocido";
+  const uint8_t totalValidVotes = votes.plastico + votes.vidrio;
+  // Una sola predicción nunca abre una compuerta. Desconocido es una
+  // abstención, así que no cuenta dentro de este mínimo ni rompe empates.
+  if (totalValidVotes < 2) return "desconocido";
   if (votes.plastico > votes.vidrio) return "plastico";
   if (votes.vidrio > votes.plastico) return "vidrio";
-  return votes.plasticoConfidence >= votes.vidrioConfidence ? "plastico" : "vidrio";
+  return "desconocido";
 }
 
 // Registra el resultado final (ya votado) en recycle_events — las 3 fotos
@@ -278,35 +285,54 @@ void classifyResidue() {
       Serial.printf("ERROR: JSON invalido en foto %u\n", index + 1);
       continue;
     }
-    const String material = document["material"].as<String>();
-    const float confidence = document["confidence"] | 0.0F;
-    addVote(votes, material, confidence);
+    // Cada respuesta trae los votos independientes de la misma foto. No se
+    // fusionan aquí: tras tres fotos, el firmware decide con hasta seis votos.
+    JsonArrayConst photoVotes = document["vision_votes"].as<JsonArrayConst>();
+    uint8_t receivedVotes = 0;
+    String providerMaterial = "no_disponible";
+    float providerConfidence = 0.0F;
+    String localMaterial = "no_disponible";
+    float localConfidence = 0.0F;
+    for (JsonVariantConst vote : photoVotes) {
+      const String source = vote["source"].as<String>();
+      const String voteMaterial = vote["material"].as<String>();
+      const float voteConfidence = vote["confidence"] | 0.0F;
+      addVote(votes, voteMaterial, voteConfidence);
+      ++receivedVotes;
 
-    // El servicio híbrido analiza esta misma foto con el proveedor visual y
-    // con el MobileNetV2 local. Mostrar ambos resultados deja visibles las
-    // seis predicciones (dos por cada una de las tres capturas) sin tomar
-    // fotos distintas ni alterar el voto mayoritario del firmware.
-    JsonVariantConst providerResult = document["vision_provider_result"];
-    JsonVariantConst localResult = document["vision_local_result"];
-    if (!providerResult.isNull() && !localResult.isNull()) {
-      const String providerMaterial = providerResult["material"].as<String>();
-      const float providerConfidence = providerResult["confidence"] | 0.0F;
-      const String localMaterial = localResult["material"].as<String>();
-      const float localConfidence = localResult["confidence"] | 0.0F;
+      if (source == "openai_sistema_experto") {
+        providerMaterial = voteMaterial;
+        providerConfidence = voteConfidence;
+      } else if (source == "modelo_local") {
+        localMaterial = voteMaterial;
+        localConfidence = voteConfidence;
+      }
+    }
+
+    // Compatibilidad con un servicio de visión anterior durante un despliegue
+    // gradual: si no envía vision_votes, conserva su único resultado.
+    if (receivedVotes == 0) {
+      const String material = document["material"].as<String>();
+      const float confidence = document["confidence"] | 0.0F;
+      addVote(votes, material, confidence);
+      Serial.printf("foto %u: respaldo=%s (%.2f)\n", index + 1, material.c_str(), confidence);
+    } else {
       Serial.printf(
-          "foto %u: OpenAI=%s (%.2f) | modelo=%s (%.2f) | fusion=%s (%.2f)\n",
+          "foto %u: OpenAI=%s (%.2f) | modelo=%s (%.2f)\n",
           index + 1,
           providerMaterial.c_str(),
           providerConfidence,
           localMaterial.c_str(),
-          localConfidence,
-          material.c_str(),
-          confidence);
-    } else {
-      Serial.printf("foto %u: %s (%.2f)\n", index + 1, material.c_str(), confidence);
+          localConfidence);
     }
     if (index + 1 < kCaptureCount) delay(kCaptureIntervalMs);
   }
+
+  Serial.printf(
+      "Votos validos: plastico=%u | vidrio=%u | abstenciones=%u\n",
+      votes.plastico,
+      votes.vidrio,
+      votes.abstenciones);
 
   const String material = winningMaterial(votes);
   if (material == "desconocido") {

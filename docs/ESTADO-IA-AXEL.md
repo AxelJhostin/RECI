@@ -15,7 +15,8 @@ El flujo actual es:
 
 ```text
 ESP32-CAM → API web de Reci → servicio de visión →
-OpenAI + MobileNetV2 + heurísticas OpenCV + sistema experto + fusión →
+OpenAI+sistema experto y MobileNetV2 como votos independientes →
+mayoría de hasta seis votos en ESP32-CAM →
 vidrio | plastico | desconocido → Arduino Mega
 ```
 
@@ -50,16 +51,18 @@ Commits relacionados:
 - Se portó el MobileNetV2/TFLite de RECI2 (`run_20260721_2129`) al servicio.
   Cada una de las tres fotos ahora se analiza con OpenAI y con el modelo
   propio, produciendo seis predicciones sobre tres capturas.
-- La fusión inicial asigna 70 % de peso al proveedor y 30 % al modelo local.
-  Un conflicto fuerte o un rechazo del sistema experto produce
-  `desconocido`; el modelo binario no puede abrir una compuerta por sí solo.
+- La decisión se cambió a una mayoría simple de hasta seis votos: tres de
+  OpenAI+sistema experto y tres del modelo local. `desconocido` es abstención,
+  no tiene peso; empate o menos de dos votos válidos produce `desconocido`.
+  El cambio responde a una matriz manual de 14 pruebas, donde la ponderación
+  descartaba aciertos del modelo local.
 - Si el modelo local no carga, se conserva el flujo anterior de OpenAI,
   heurísticas y sistema experto.
 - La prueba de portabilidad del TFLite acertó **13/15** imágenes reales
   etiquetadas de RECI2. Los dos errores fueron el par ambiguo Gatorade
-  vidrio/plástico, por lo que todavía no se ajustan pesos ni se permite que
-  el modelo local decida solo.
-- Resultado técnico después de la integración: **16/16 pruebas del servicio
+  vidrio/plástico; se mantiene la validación con objetos reales antes de
+  entrenar una versión nueva del modelo.
+- Resultado técnico después de la integración: **13/13 pruebas del servicio
   de visión** y **118/118 pruebas del sistema experto** aprobadas.
 - La integración de OpenAI tiene pruebas unitarias sin red y una prueba real
   completada contra el endpoint local.
@@ -83,8 +86,8 @@ Commit relacionado:
   imágenes correctamente. La IP de la ESP32-CAM es dinámica y puede cambiar
   al reconectarla; por eso no se fija como configuración del proyecto.
 - La siguiente validación física debe repetir esas pruebas con la integración
-  híbrida y la ESP32-CAM final, registrando por foto los dos resultados y la
-  fusión.
+  híbrida y la ESP32-CAM final, registrando por foto los dos votos y el
+  conteo final de plástico, vidrio y abstenciones.
 - Se localizaron y evaluaron 201 capturas reales QVGA etiquetadas como
   vidrio. El modelo acertó **141/201 (70.15 %)**: 77/100 en una ronda y
   63/100 en otra, además de una captura inicial correcta. No hay todavía
@@ -114,11 +117,12 @@ ajustará mediante fine-tuning con el dataset propio.
 2. Crear el flujo de captura con vista en vivo para supervisar cada ronda de
    fotos mientras se guardan por clase.
 3. Evaluar el modelo integrado frente al dataset de la ESP32-CAM y construir
-   una matriz de confusión separada para OpenAI, MobileNetV2 y la fusión.
+   una matriz de confusión separada para OpenAI, MobileNetV2 y la mayoría de
+   seis votos.
 4. Hacer transfer learning/reentrenamiento de MobileNetV2 si la evaluación
    muestra que el modelo previo no se adapta bien a la cámara real.
-5. Ajustar los pesos de fusión únicamente con resultados reales revisados
-   con Paula; conservar el sistema experto como barrera de seguridad.
+5. Ajustar la política de abstenciones o el mínimo de votos únicamente con
+   resultados reales revisados con Paula.
 6. Validar OpenAI con fotos reales (precisión, latencia y costo); usar Claude
    o Gemini solo como comparación cuando aparezca un caso ambiguo.
 

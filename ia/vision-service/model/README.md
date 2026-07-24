@@ -15,13 +15,13 @@ El run original es `RECI2/runs/run_20260721_2129`:
 
 Estas métricas corresponden al dataset anterior. No garantizan el mismo
 resultado con la ESP32-CAM; el modelo debe evaluarse con fotos de esa cámara
-antes de modificar los pesos de fusión.
+antes de modificar la política de votación.
 
 Como prueba de portabilidad, el artefacto integrado acertó 13/15 imágenes
 reales etiquetadas de `RECI2/images/`. Los dos errores fueron el par ambiguo
 de Gatorade vidrio/plástico (`prueba10.jpeg` y `prueba12.jpeg`). Esta
-evidencia justifica que el modelo local no decida solo y que un conflicto
-fuerte produzca `desconocido`.
+evidencia justifica que el modelo local no decida a partir de una sola foto:
+su resultado aporta un voto dentro de la mayoría de seis señales.
 
 La evaluación más relevante disponible usa 201 capturas QVGA reales de la
 ESP32-CAM etiquetadas como vidrio: **141/201 (70.15 %)** fueron correctas.

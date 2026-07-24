@@ -4,7 +4,7 @@
 #
 # Adaptado de dev/RECI (vision/attribute_extractor.py). Diferencias:
 # - El proveedor se mantiene independiente del clasificador TFLite local:
-#   ambos analizan la misma foto y main.py fusiona sus resultados después.
+#   ambos analizan la misma foto y main.py emite sus votos por separado.
 #   Esto permite medir seis predicciones reales por depósito sin que una
 #   señal contamine a la otra.
 # - Sin lógica de cámara/hilo — este servicio es un endpoint HTTP síncrono.

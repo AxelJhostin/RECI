@@ -1,8 +1,8 @@
 # vision/vision_config.py
 # Configuración y validación del proveedor de visión (Claude / Gemini / OpenAI)
 # Adaptado de dev/RECI (vision/vision_config.py). Esta configuración selecciona
-# el proveedor remoto; el MobileNetV2 local se configura por separado y se
-# fusiona después para mantener independientes ambas predicciones.
+# el proveedor remoto; el MobileNetV2 local se configura por separado y ambos
+# resultados se emiten como votos independientes.
 
 from __future__ import annotations
 

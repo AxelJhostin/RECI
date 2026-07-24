@@ -48,16 +48,18 @@ ESP32-CAM -> 3 fotos -> POST /api/vision/classify -> Vision Service /v1/classify
                                       -> OpenAI (9 atributos visuales)
                                       -> heurísticas OpenCV
                                       -> Sistema Experto (193 reglas, CF MYCIN)
-                                      -> fusión 70 % proveedor / 30 % modelo
-                                     <- material + resultados de ambos
+                                      -> voto del proveedor + voto del modelo
+                                     <- resultado base + votos de ambos
                        Supabase (recycle_events) <- si material != desconocido
 ESP32-CAM <- { material, confidence, rule_applied } -> reenvía CMD:OPEN:<material> al Arduino Mega
 ```
 
 Las tres fotos generan seis predicciones comparables porque ambos modelos
-analizan las mismas imágenes. Si el proveedor/sistema experto rechaza el
-objeto o si existe un conflicto fuerte, la fusión devuelve `desconocido`. El
-modelo binario nunca puede aceptar por sí solo latas, orgánicos o cartón.
+analizan las mismas imágenes. La ESP32-CAM suma los votos de plástico y vidrio
+sin ponderarlos; `desconocido` es una abstención. Con empate o menos de dos
+votos válidos, responde `desconocido`. Esta configuración se valida solo con
+objetos de plástico o vidrio porque el modelo local binario no reconoce latas,
+orgánicos ni cartón.
 
 El servicio de visión no guarda fotos ni atributos: cada petición es
 independiente. El log queda en la salida estándar del contenedor (no en
@@ -69,8 +71,8 @@ contenedor.
 Ver la tabla completa en [`ia/vision-service/README.md`](../ia/vision-service/README.md#qué-se-portó-de-devreci-y-qué-no).
 Resumen: `expert_system/` se portó y amplió; la llamada al proveedor de visión
 se reescribió en `vision/classifier.py`; el MobileNetV2 se portó como
-clasificador independiente en `vision/local_model.py`; y la fusión vive en
-`vision/fusion.py`. No se portó `camera.py` porque la captura ahora vive en el
+clasificador independiente en `vision/local_model.py`; y los votos por foto
+se construyen en `vision/voting.py`. No se portó `camera.py` porque la captura ahora vive en el
 firmware, ni el log a archivo porque fue reemplazado por `logging` a stdout.
 
 ## Seguridad

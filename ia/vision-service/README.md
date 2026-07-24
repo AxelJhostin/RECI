@@ -5,7 +5,8 @@ Servicio FastAPI privado que clasifica una foto de residuo como `vidrio`,
 el MobileNetV2/TFLite entrenado por Axel y con Claude, Gemini u OpenAI. Los
 atributos del proveedor se refinan con OpenCV y pasan por el sistema experto
 de Reci (193 reglas, CF MYCIN, meta-reglas, forward + backward chaining).
-Después se fusionan ambas señales dando más peso al proveedor.
+El proveedor y el modelo local conservan votos independientes; no se fusionan
+dentro de una misma foto.
 
 La ESP32-CAM mantiene tres capturas por depósito: esto produce seis
 predicciones visibles, tres del modelo propio y tres del proveedor, sobre
@@ -25,13 +26,10 @@ VISION_API=openai
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.6-luna
 
-# Fusión híbrida (valores predeterminados):
+# Modelo local opcional:
 LOCAL_MODEL_ENABLED=true
 LOCAL_MODEL_PATH=model/model.tflite
 LOCAL_MODEL_LABELS=model/labels.txt
-VISION_PROVIDER_WEIGHT=0.70
-VISION_LOCAL_WEIGHT=0.30
-VISION_FUSION_MIN_CONFIDENCE=0.70
 
 # Alternativas configurables:
 # VISION_API=claude
@@ -46,11 +44,12 @@ Claude y Gemini se conservan como alternativas de diagnóstico; la decisión de
 mantener OpenAI debe validarse con las fotos reales de la ESP32-CAM mediante
 la plantilla de pruebas antes del despliegue.
 
-El modelo local solo conoce `plastico` y `vidrio`. Por eso nunca puede
-convertir en aceptado un resultado `desconocido` del proveedor y el sistema
-experto. Si existe un conflicto fuerte, la fusión devuelve `desconocido` y no
-abre ninguna compuerta. Si el runtime o el archivo TFLite no están
-disponibles, el servicio conserva el flujo anterior del proveedor.
+El modelo local solo conoce `plastico` y `vidrio`. Por eso esta votación se
+prueba únicamente con residuos de esas dos clases. `desconocido` del
+proveedor es una abstención: queda registrado como diagnóstico y no suma a
+ningún material. Tras las tres fotos, el firmware abre solo si hay al menos
+dos votos válidos y una mayoría sin empate. Si el runtime o el archivo TFLite
+no están disponibles, cada foto conserva el único voto del proveedor.
 
 ## Desarrollo local
 
@@ -101,12 +100,10 @@ Respuesta esperada:
     "confidence": 0.98,
     "model": "model.tflite"
   },
-  "vision_fusion": {
-    "material": "vidrio",
-    "confidence": 0.962,
-    "agreement": true,
-    "method": "fusion_ponderada"
-  }
+  "vision_votes": [
+    { "source": "openai_sistema_experto", "material": "vidrio", "confidence": 0.95, "counts_as_vote": true },
+    { "source": "modelo_local", "material": "vidrio", "confidence": 0.98, "counts_as_vote": true }
+  ]
 }
 ```
 
@@ -183,9 +180,9 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 | De `dev/RECI` | Estado aquí |
 |---|---|
 | `expert_system/` completo (193 reglas, CF MYCIN, meta-reglas) | ✅ Portado y ampliado con las correcciones de RECI2 — es Python puro, sin dependencia de hardware ni archivos |
-| `vision/visual_heuristics.py` | ✅ Portado y ampliado; el proveedor se refina de forma independiente antes de la fusión |
+| `vision/visual_heuristics.py` | ✅ Portado y ampliado; el proveedor se refina de forma independiente antes de emitir su voto |
 | `vision/attribute_extractor.py` (llamada a Claude/Gemini + prompt) | ⚠️ Reescrito en `vision/classifier.py` — soporta Claude, Gemini y OpenAI, con menos reintentos |
-| MobileNetV2 local/TFLite | ✅ Portado desde `run_20260721_2129`; `vision/local_model.py` lo carga una vez y `vision/fusion.py` combina sus probabilidades |
+| MobileNetV2 local/TFLite | ✅ Portado desde `run_20260721_2129`; `vision/local_model.py` lo carga una vez y `vision/voting.py` emite su voto independiente |
 | `vision/camera.py` (captura + triple voto + persistencia de correcciones) | ❌ No aplica — la captura la hace el firmware de la ESP32-CAM, no este servicio |
 | `vision/clasificacion_log.py` (log a archivo local) | ❌ No portado — reemplazado por `logging` a stdout (los contenedores no garantizan disco persistente entre despliegues) |
 | `tests/test_cases.py` + `tests/casos/` (118 pruebas del sistema experto) | ✅ Alineado con RECI2 — 118/118 |
@@ -194,10 +191,10 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 
 ## Próximos pasos
 
-- **Validar el modelo portado con la ESP32-CAM**: registrar por cada una de
-  las tres fotos el resultado de OpenAI, el resultado local y la fusión.
-  Los pesos iniciales 70/30 responden a los errores conocidos de Gatorade;
-  no volver a cambiarlos sin una matriz de confusión real.
+- **Validar el voto de seis señales con la ESP32-CAM**: registrar por cada
+  una de las tres fotos el resultado de OpenAI y el local, y al final contar
+  plástico, vidrio y abstenciones. No mezclar las señales por confianza antes
+  de la mayoría; revisar la matriz de confusión con imágenes reales.
 - **Adaptar el modelo si hace falta**: si existe una brecha entre la cámara
   de Mac usada en el entrenamiento y la ESP32-CAM, hacer fine-tuning con el
   dataset nuevo en vez de entrenar desde cero.

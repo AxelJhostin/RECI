@@ -3,8 +3,9 @@
 Recibe una imagen capturada por la ESP32-CAM (reenviada por el backend
 Next.js), ejecuta el MobileNetV2 local y llama al proveedor configurado para
 extraer 9 atributos visuales. Después refina esos atributos con OpenCV, corre
-el sistema experto y fusiona ambas predicciones de forma conservadora. No
-persiste imágenes ni atributos — cada petición es independiente.
+el sistema experto y emite dos votos independientes por foto. La ESP32-CAM
+reúne los votos de las tres capturas. No persiste imágenes ni atributos — cada
+petición es independiente.
 
 Ver docs/DECISION-SERVICIO-VISION.md para la arquitectura completa.
 """
@@ -28,8 +29,8 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 
 from expert_system.inference_engine import InferenceEngine
 from vision.classifier import VisionClassifier, VisionProviderError
-from vision.fusion import fuse_material_predictions
 from vision.local_model import LocalMaterialClassifier
+from vision.voting import build_photo_votes
 
 load_dotenv()
 
@@ -56,24 +57,9 @@ _local_classifier: LocalMaterialClassifier | None = None
 _local_classifier_error: str | None = None
 
 
-def _env_float(name: str, default: float) -> float:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        logger.warning("%s=%r no es numérico; se usa %.2f", name, raw, default)
-        return default
-
-
 LOCAL_MODEL_ENABLED = os.getenv("LOCAL_MODEL_ENABLED", "true").lower() not in {
     "0", "false", "no", "off",
 }
-PROVIDER_WEIGHT = _env_float("VISION_PROVIDER_WEIGHT", 0.70)
-LOCAL_WEIGHT = _env_float("VISION_LOCAL_WEIGHT", 0.30)
-FUSION_MIN_CONFIDENCE = _env_float("VISION_FUSION_MIN_CONFIDENCE", 0.70)
-
 try:
     _classifier = VisionClassifier()
     logger.info("VisionClassifier listo | proveedor=%s modelo=%s",
@@ -127,10 +113,10 @@ def health() -> dict[str, Any]:
             ),
             "error": _local_classifier_error,
         },
-        "fusion": {
-            "provider_weight": PROVIDER_WEIGHT,
-            "local_weight": LOCAL_WEIGHT,
-            "minimum_confidence": FUSION_MIN_CONFIDENCE,
+        "votacion": {
+            "capturas_por_residuo": 3,
+            "votos_por_captura": "proveedor y modelo local",
+            "decision": "mayoria_simple_en_firmware",
         },
         "advertencias": _classifier.advertencias,
     }
@@ -179,31 +165,23 @@ async def classify(image: Annotated[UploadFile, File(...)]) -> dict[str, Any]:
             # fallo local se registra, pero no tumba la clasificación.
             logger.exception("fallo del modelo local; se usa solo el proveedor")
 
-    fusion = fuse_material_predictions(
-        provider_material,
-        confianza,
-        local_result,
-        provider_weight=PROVIDER_WEIGHT,
-        local_weight=LOCAL_WEIGHT,
-        minimum_confidence=FUSION_MIN_CONFIDENCE,
-    )
-    material = fusion["material"]
-    final_confidence = fusion["confidence"]
+    photo_votes = build_photo_votes(provider_material, confianza, local_result)
 
     logger.info(
-        "clasificacion | proveedor=%s(%.2f) local=%s(%s) fusion=%s(%.2f) acuerdo=%s",
+        "clasificacion | proveedor=%s(%.2f) local=%s(%s) votos=%s",
         provider_material,
         confianza,
         local_result.get("material") if local_result else "no_disponible",
         f"{local_result.get('confidence', 0):.2f}" if local_result else "-",
-        material,
-        final_confidence,
-        fusion["agreement"],
+        ",".join(str(vote["material"]) for vote in photo_votes),
     )
 
     return {
-        "material": material,
-        "confidence": round(final_confidence, 4),
+        # Se mantiene este contrato para clientes que hacen una sola llamada.
+        # La ESP32-CAM no lo usa como decisión final: reúne vision_votes de
+        # tres fotos y ejecuta la mayoría de seis votos en el firmware.
+        "material": provider_material,
+        "confidence": round(confianza, 4),
         "rule_applied": rule_applied,
         "conclusion_se": conclusion,
         "atributos": atributos,
@@ -215,5 +193,5 @@ async def classify(image: Annotated[UploadFile, File(...)]) -> dict[str, Any]:
             "confidence": round(confianza, 4),
         },
         "vision_local_result": local_result,
-        "vision_fusion": fusion,
+        "vision_votes": photo_votes,
     }
