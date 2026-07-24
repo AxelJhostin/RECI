@@ -1,4 +1,4 @@
-// Reci · ESP32-CAM AI Thinker · clasificación de residuos
+// Reci · ESP32-CAM AI Thinker · clasificación de residuos + saludo facial
 //
 // El Monitor Serial envía C para iniciar una lectura: la cámara toma tres
 // fotos con iluminación externa, el backend clasifica cada una y el Mega abre una compuerta
@@ -6,6 +6,12 @@
 // (ya votado) se registra una sola vez en recycle_events; si nadie fue
 // identificado, el Mega muestra en el OLED el QR para reclamar los puntos
 // desde la app — ver docs/DECISION-QR-RECLAMO.md.
+//
+// Cuando el PIR del Mega detecta presencia, manda "RECI:PRESENCE:detected"
+// por el mismo UART. La ESP32-CAM toma una foto y la manda a
+// /api/face/recognize (opt-in, ver docs/DECISION-SERVICIO-FACIAL.md); si hay
+// coincidencia pide el saludo personalizado a /api/robot/display y lo
+// muestra en la LCD del Mega.
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -44,6 +50,8 @@ constexpr unsigned long kFlashWarmupMs = 220UL;
 constexpr unsigned long kCaptureIntervalMs = 350UL;
 constexpr uint8_t kCaptureCount = 3;
 constexpr char kBoundary[] = "ReciMaterialBoundary2026";
+
+
 
 HardwareSerial mega(1);
 
@@ -238,6 +246,94 @@ String recordRecycleEvent(const String& material, float confidence) {
   return document["event"]["claim_code"] | "";
 }
 
+String postFaceRecognize(camera_fb_t* frame, int& statusCode) {
+  WiFiClient client;
+  HTTPClient http;
+  const String url = String(RECI_API_BASE_URL) + "/api/face/recognize";
+  String prefix = String("--") + kBoundary + "\r\n";
+  prefix += "Content-Disposition: form-data; name=\"image\"; filename=\"visitante.jpg\"\r\n";
+  prefix += "Content-Type: image/jpeg\r\n\r\n";
+  const String suffix = String("\r\n--") + kBoundary + "--\r\n";
+  MultipartCameraStream payload(prefix, frame->buf, frame->len, suffix);
+
+  if (!http.begin(client, url)) {
+    statusCode = -1;
+    return "";
+  }
+  http.addHeader("Authorization", String("Bearer ") + RECI_ROBOT_API_KEY);
+  http.addHeader("Content-Type", String("multipart/form-data; boundary=") + kBoundary);
+  statusCode = http.sendRequest("POST", &payload, payload.totalLength());
+  const String body = statusCode > 0 ? http.getString() : "";
+  http.end();
+  return body;
+}
+
+// Trae las dos líneas de saludo ya armadas por el backend para no duplicar
+// aquí el "Bienvenido, <nombre>" — ver GET /api/robot/display en
+// docs/API-ROBOT.md.
+bool fetchGreetingLines(const String& profileId, String& firstLine, String& secondLine) {
+  WiFiClient client;
+  HTTPClient http;
+  const String url = String(RECI_API_BASE_URL) + "/api/robot/display?profile_id=" + profileId;
+  if (!http.begin(client, url)) return false;
+  http.addHeader("Authorization", String("Bearer ") + RECI_ROBOT_API_KEY);
+  const int statusCode = http.GET();
+  const String body = statusCode == HTTP_CODE_OK ? http.getString() : "";
+  http.end();
+  if (statusCode != HTTP_CODE_OK) return false;
+
+  JsonDocument document;
+  if (deserializeJson(document, body)) return false;
+  firstLine = document["lines"][0] | "";
+  secondLine = document["lines"][1] | "";
+  return firstLine.length() > 0;
+}
+
+void greetVisitor() {
+  if (WiFi.status() != WL_CONNECTED && !connectWiFi()) return;
+
+  Serial.println(F("--- PRESENCIA DETECTADA: reconocimiento facial ---"));
+  camera_fb_t* frame = captureIlluminatedFrame();
+  if (frame == nullptr) {
+    Serial.println(F("ERROR: no se pudo capturar foto para reconocimiento facial"));
+    return;
+  }
+
+  int statusCode = 0;
+  const String body = postFaceRecognize(frame, statusCode);
+  esp_camera_fb_return(frame);
+
+  if (statusCode != HTTP_CODE_OK) {
+    Serial.printf("ERROR: /face/recognize respondio %d\n", statusCode);
+    return;
+  }
+
+  JsonDocument document;
+  if (deserializeJson(document, body)) {
+    Serial.println(F("ERROR: JSON invalido en /face/recognize"));
+    return;
+  }
+
+  if (!(document["matched"] | false)) {
+    Serial.println(F("Reconocimiento facial: sin coincidencia"));
+    showOnLcd("Hola, soy Reci", "Recicla y gana");
+    return;
+  }
+
+  const String profileId = document["profile_id"].as<String>();
+  const String displayName = document["display_name"].as<String>();
+  Serial.print(F("Reconocimiento facial: "));
+  Serial.println(displayName);
+
+  String firstLine;
+  String secondLine;
+  if (fetchGreetingLines(profileId, firstLine, secondLine)) {
+    showOnLcd(firstLine, secondLine);
+  } else {
+    showOnLcd("Bienvenido,", displayName);
+  }
+}
+
 void classifyResidue() {
   if (WiFi.status() != WL_CONNECTED && !connectWiFi()) return;
 
@@ -302,6 +398,23 @@ void readClassificationRequest() {
   while (Serial.available() > 0) {
     const char command = static_cast<char>(Serial.read());
     if (command == 'c' || command == 'C') classifyResidue();
+    // 'F' dispara el mismo reconocimiento facial que el PIR, para probarlo
+    // sin depender de que el sensor de presencia ya esté cableado.
+    if (command == 'f' || command == 'F') greetVisitor();
+  }
+}
+
+void readMegaEvents() {
+  static String line;
+  while (mega.available() > 0) {
+    const char character = static_cast<char>(mega.read());
+    if (character == '\r') continue;
+    if (character == '\n') {
+      if (line == "RECI:PRESENCE:detected") greetVisitor();
+      line = "";
+      continue;
+    }
+    line += character;
   }
 }
 
@@ -319,9 +432,10 @@ void setup() {
   if (!connectWiFi()) return;
   showOnLcd("Hola, soy Reci", "Envia C para leer");
   sendMega("CMD:FACE:idle");
-  Serial.println(F("Listo. Envia C por el Monitor Serial para clasificar un residuo."));
+  Serial.println(F("Listo. Envia C para clasificar un residuo, F para probar el reconocimiento facial."));
 }
 
 void loop() {
   readClassificationRequest();
+  readMegaEvents();
 }

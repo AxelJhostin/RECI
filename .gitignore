@@ -21,6 +21,7 @@ venv/
 .pio/
 .pioenvs/
 .piolibdeps/
+ReciEsp32CamSecrets.h
 
 # env files
 .env

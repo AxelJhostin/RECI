@@ -14,6 +14,7 @@
 //   D9-D12  -> L298N derecho (reservados; detenidos por ahora)
 //   D16/TX2, D17/RX2 -> ESP32-CAM
 //   D20/SDA, D21/SCL -> OLED SSD1306 + MPU (bus I2C compartido)
+//   D28 -> PIR (detección de presencia, ver docs/CONEXIONES.md ETAPA 5)
 //
 // Protocolo ESP32-CAM -> Mega (una orden por línea, terminada en \n):
 //   CMD:CLASSIFY:vidrio
@@ -21,6 +22,11 @@
 //   CMD:FACE:idle|moving|thinking|happy|confused|sleep
 //   CMD:OLED:<mensaje corto>
 //   CMD:QR:<claim_code>   -- QR de reclamo de puntos (ver docs/DECISION-QR-RECLAMO.md)
+//
+// Protocolo Mega -> ESP32-CAM (además de las confirmaciones RECI:<...> de
+// cada orden de arriba):
+//   RECI:PRESENCE:detected  -- el PIR pasó de LOW a HIGH; dispara el
+//                              reconocimiento facial en la ESP32-CAM.
 //
 // Las órdenes de clasificación distintas de vidrio/plastico no mueven servos.
 // ============================================================
@@ -36,6 +42,7 @@ namespace {
 constexpr uint8_t kServoVidrioPin = 3;
 constexpr uint8_t kServoPlasticoPin = 4;
 constexpr uint8_t kMotorPins[] = {5, 6, 7, 8, 9, 10, 11, 12};
+constexpr uint8_t kPirPin = 28;
 
 constexpr uint8_t kServoCerrado = 0;
 constexpr uint8_t kServoAbierto = 90;
@@ -47,6 +54,8 @@ Servo servoVidrio;
 Servo servoPlastico;
 ReciDisplay pantalla;
 ReciLcdDisplay lcd;
+
+bool presenciaActiva = false;
 
 enum class CompuertaActiva : uint8_t {
   Ninguna,
@@ -174,6 +183,17 @@ void procesarComando(char* command) {
   responder(F("ERROR:invalid-command"));
 }
 
+// Detecta el flanco LOW->HIGH del PIR y avisa una sola vez por presencia
+// (no repite el aviso hasta que el PIR vuelve a LOW, típicamente cuando la
+// persona se aleja o el módulo termina su ventana de retención).
+void revisarPresencia() {
+  const bool detectado = digitalRead(kPirPin) == HIGH;
+  if (detectado && !presenciaActiva) {
+    responder(F("PRESENCE:detected"));
+  }
+  presenciaActiva = detectado;
+}
+
 void leerComandosEsp32() {
   while (Serial2.available() > 0) {
     const char character = static_cast<char>(Serial2.read());
@@ -210,6 +230,8 @@ void setup() {
   }
   detenerMotores();
 
+  pinMode(kPirPin, INPUT);
+
   servoVidrio.attach(kServoVidrioPin);
   servoPlastico.attach(kServoPlasticoPin);
   cerrarCompuertas();
@@ -228,4 +250,5 @@ void loop() {
   pantalla.tick();
   leerComandosEsp32();
   actualizarCompuerta();
+  revisarPresencia();
 }

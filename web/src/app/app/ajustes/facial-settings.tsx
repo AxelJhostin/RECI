@@ -86,6 +86,7 @@ export function FacialSettings({
       </div>
       <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" onChange={(event) => {
         const photo = event.target.files?.[0]
+        setShowConsent(false)
         if (photo) enroll(photo)
         event.target.value = ''
       }} />
@@ -94,7 +95,10 @@ export function FacialSettings({
           <p className="text-[13px] leading-5" style={{ color: 'var(--ink-soft)' }}>Confirmo que autorizo a Reci a usar esta foto para el reconocimiento facial dentro del campus PUCE Manabí.</p>
           <div className="mt-3 flex gap-2"><button type="button" onClick={() => setShowConsent(false)} className="flex-1 rounded-xl py-2.5 text-[13px] font-bold" style={{ background: 'var(--paper)' }}>Cancelar</button><button type="button" onClick={() => fileInput.current?.click()} disabled={busy} className="flex-1 rounded-xl py-2.5 text-[13px] font-bold text-white" style={{ background: 'var(--green)' }}>Acepto y continuar</button></div>
         </div>
-      ) : <button type="button" onClick={() => setShowConsent(true)} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-[15px] py-3.5 text-[15px] font-bold text-white disabled:opacity-50" style={{ background: 'var(--glass)' }}><Icon name="camera" size={19} stroke="#fff" />{busy ? 'Activando…' : 'Tomar o subir una foto'}</button>}
+      ) : <button type="button" onClick={() => setShowConsent(true)} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-[15px] py-3.5 text-[15px] font-bold text-white disabled:opacity-50" style={{ background: 'var(--glass)' }}>
+        {busy ? <span className="h-[19px] w-[19px] animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Icon name="camera" size={19} stroke="#fff" />}
+        {busy ? 'Activando…' : 'Tomar o subir una foto'}
+      </button>}
       {error ? <p className="rounded-xl px-3 py-2 text-[13px] font-medium" style={{ background: 'oklch(0.95 0.04 25)', color: 'var(--flame)' }}>{error}</p> : null}
     </section>
   )
