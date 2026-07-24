@@ -56,6 +56,10 @@ Commits relacionados:
   Si OpenAI no tiene mayoría, se consulta la mayoría del modelo local; un
   empate global 3–3 se resuelve con OpenAI cuando tiene mayoría interna. Si
   ninguna señal tiene mayoría estricta, se devuelve `desconocido`.
+- La matriz física ampliada registró **24/31 selecciones correctas (77.4 %)**
+  con casos difíciles de plástico y vidrio. Esto confirmó que el modelo local
+  aún debe ser respaldo; las próximas pruebas anotarán también la regla que
+  tomó la decisión, no solo el resultado final.
 - Si el modelo local no carga, se conserva el flujo anterior de OpenAI,
   heurísticas y sistema experto.
 - La prueba de portabilidad del TFLite acertó **13/15** imágenes reales
@@ -78,6 +82,9 @@ Commit relacionado:
   por clasificación con voto mayoritario.
 - Se confirmaron clasificaciones correctas de botellas de plástico y de
   vidrio en pruebas controladas.
+- Con la política más reciente se verificó una clasificación física de vidrio
+  con **6/6 diagnósticos coincidentes** y la regla `mayoria
+  OpenAI/sistema experto` visible en el Monitor Serial.
 - Una captura de vidrio tuvo un fallo de comunicación en la tercera foto,
   pero las dos primeras coincidieron y el voto mayoritario clasificó
   correctamente. Se debe observar este comportamiento en la siguiente
@@ -85,9 +92,9 @@ Commit relacionado:
 - La vista previa de la cámara se verificó desde Safari y la cámara entregó
   imágenes correctamente. La IP de la ESP32-CAM es dinámica y puede cambiar
   al reconectarla; por eso no se fija como configuración del proyecto.
-- La siguiente validación física debe repetir esas pruebas con la integración
-  híbrida y la ESP32-CAM final, registrando por foto los dos votos y el
-  conteo final de plástico, vidrio y abstenciones.
+- La siguiente validación física debe registrar por foto los dos votos, el
+  conteo final de plástico, vidrio y abstenciones, además de la regla que
+  decidió el resultado.
 - Se localizaron y evaluaron 201 capturas reales QVGA etiquetadas como
   vidrio. El modelo acertó **141/201 (70.15 %)**: 77/100 en una ronda y
   63/100 en otra, además de una captura inicial correcta. No hay todavía

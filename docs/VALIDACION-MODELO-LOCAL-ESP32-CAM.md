@@ -103,7 +103,33 @@ sesión antes de usarla como evidencia para entrenar. Esta matriz es pequeña y
 controlada: justifica probar la política de voto, pero no sustituye una
 evaluación independiente con muchas capturas ESP32-CAM.
 
-### 3.4 Capturas reales de la ESP32-CAM
+### 3.4 Matriz ampliada y política actual
+
+Una segunda matriz manual corrigió el registro de los seis diagnósticos y
+amplió la muestra a **31 pruebas físicas** de plástico y vidrio. La columna
+de selección final coincidió con el material etiquetado en **24/31 casos
+(77.4 %)**. El valor `3.42` de la hoja es el promedio de votos correctos por
+prueba, no el porcentaje de exactitud.
+
+La muestra incluye casos difíciles y repetidos (Powerade, Sporade, perfumes,
+botellas de agua y Splash), por lo que no es comparable directamente con la
+matriz corta de 14 objetos. Sirvió para detectar que el modelo local todavía
+confunde varios plásticos con vidrio y que darle el mismo peso que OpenAI
+reduce la estabilidad.
+
+Por eso la política activa es:
+
+1. Conservar los seis diagnósticos visibles.
+2. Decidir por mayoría interna de OpenAI+sistema experto cuando existe.
+3. Usar la mayoría del MobileNetV2 únicamente como respaldo si OpenAI no
+   logra mayoría.
+4. Si ninguna señal tiene mayoría estricta, devolver `desconocido`.
+
+Las próximas hojas de prueba deben incluir una columna `Regla de decisión`
+(`mayoría OpenAI/sistema experto` o `respaldo modelo local`) para medir con
+exactitud qué señal tomó cada resultado.
+
+### 3.5 Capturas reales de la ESP32-CAM
 
 Se encontraron **201 JPEG válidos QVGA (320×240)** en la carpeta local:
 
@@ -152,13 +178,14 @@ precisión esperada del robot físico.
 
 1. Conservar al menos una ronda completa de vidrio como prueba final sin
    usarla para entrenamiento.
-2. Capturar plástico con la misma ESP32-CAM y condiciones comparables.
+2. Capturar plástico y vidrio con la misma ESP32-CAM, luz y fondo
+   comparables; guardar por objeto y por sesión.
 3. Agregar más objetos físicos por clase; la variedad de objetos importa más
    que miles de fotogramas casi iguales.
 4. Dividir por objeto o sesión completa, no repartir aleatoriamente fotos
    consecutivas entre entrenamiento y prueba.
 5. Medir por separado MobileNetV2, OpenAI y la política primaria + respaldo
-   sobre el mismo conjunto.
+   sobre el mismo conjunto, incluyendo la regla que tomó cada decisión.
 6. Calcular matriz de confusión, precisión y recall por clase.
 7. Hacer fine-tuning con las sesiones de entrenamiento, manteniendo intacto
    el conjunto reservado.
