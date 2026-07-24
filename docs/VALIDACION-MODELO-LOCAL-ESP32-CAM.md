@@ -36,11 +36,13 @@ La ESP32-CAM toma tres fotos por residuo. Cada foto se analiza con:
 
 1. OpenAI + heurísticas OpenCV + sistema experto.
 2. MobileNetV2 local.
-3. Dos votos independientes, sin ponderarlos dentro de la foto.
+3. Dos votos independientes por foto; OpenAI es señal primaria y el modelo
+   local es respaldo si OpenAI no tiene mayoría.
 
 Esto produce seis predicciones observables sobre tres imágenes iguales. El
-firmware conserva una mayoría simple de los hasta seis votos. `desconocido`
-es abstención; con empate o menos de dos votos válidos, responde
+firmware conserva los seis diagnósticos, pero decide primero con la mayoría
+interna de OpenAI. Solo si OpenAI no tiene mayoría consulta la mayoría local.
+`desconocido` es abstención; si ninguna señal tiene mayoría estricta, responde
 `desconocido`.
 
 El modelo local solo conoce `plastico` y `vidrio`; no puede reconocer latas,
@@ -48,7 +50,7 @@ cartón u orgánicos. Por seguridad:
 
 - se prueba únicamente con plástico y vidrio, las clases que el TFLite conoce;
 - si el TFLite no carga, continúa el flujo anterior de OpenAI;
-- la decisión final requiere una mayoría y al menos dos votos válidos;
+- la decisión final requiere una mayoría estricta de una señal;
 - se debe mantener una matriz de confusión con imágenes nuevas de la
   ESP32-CAM.
 
@@ -80,18 +82,20 @@ Errores conocidos:
 
 El problema no es una sola dirección: la marca, la forma y la etiqueta son
 parecidas mientras cambia el material. No se añadió una regla exclusiva para
-Gatorade. La decisión ahora se valida con seis votos independientes: los
-resultados del modelo se observan y cuentan, pero la matriz de pruebas debe
-confirmar su comportamiento antes de usar el sistema con objetos fuera de
-plástico y vidrio.
+Gatorade. Los seis resultados siguen visibles para diagnóstico; la matriz de
+pruebas demostró que OpenAI debe ser la señal primaria mientras el modelo
+local no tenga una validación independiente suficiente.
 
 ### 3.3 Matriz manual de seis votos
 
 En una prueba manual de **14 objetos** etiquetados como plástico o vidrio,
 se anotaron los tres resultados de OpenAI+sistema experto y los tres del
 modelo local por objeto. Al contar los seis resultados sin ponderación y
-tratar `desconocido` como abstención, la mayoría coincidió con la etiqueta en
-**13/14 casos (92.9 %)**.
+tratar `desconocido` como abstención, la mayoría simple coincidió con la
+etiqueta en **13/14 casos (92.9 %)**. La nueva tabla de 31 pruebas mostró que una
+votación igualitaria bajaba el resultado porque el modelo local era menos
+preciso; por eso la política actual conserva los seis diagnósticos, pero usa
+OpenAI como señal primaria.
 
 El único desacuerdo fue un objeto etiquetado como plástico cuyos cinco votos
 válidos fueron vidrio. Se debe revisar visualmente esa etiqueta en la próxima
@@ -153,14 +157,14 @@ precisión esperada del robot físico.
    que miles de fotogramas casi iguales.
 4. Dividir por objeto o sesión completa, no repartir aleatoriamente fotos
    consecutivas entre entrenamiento y prueba.
-5. Medir por separado MobileNetV2, OpenAI y la mayoría de seis votos sobre el
-   mismo conjunto.
+5. Medir por separado MobileNetV2, OpenAI y la política primaria + respaldo
+   sobre el mismo conjunto.
 6. Calcular matriz de confusión, precisión y recall por clase.
 7. Hacer fine-tuning con las sesiones de entrenamiento, manteniendo intacto
    el conjunto reservado.
 8. Repetir la evaluación reservada y comparar antes/después.
-9. Ajustar abstenciones o mínimo de votos solo con evidencia y aprobación de
-   Paula.
+9. Ajustar la prioridad o el respaldo local solo con evidencia y aprobación
+   de Paula.
 
 Meta sugerida para revisión con Paula: al menos 90 % por clase en un conjunto
 independiente de la ESP32-CAM. La votación actual debe validarse solo con
@@ -168,7 +172,7 @@ plástico y vidrio hasta añadir una política específica para otros materiales
 
 ## 6. Pruebas de software vigentes
 
-- Servicio de visión híbrido: **13/13 pruebas aprobadas**.
+- Servicio de visión híbrido: **16/16 pruebas aprobadas**.
 - Sistema experto: **118/118 pruebas aprobadas**.
 - Comprobación TypeScript: sin errores.
 

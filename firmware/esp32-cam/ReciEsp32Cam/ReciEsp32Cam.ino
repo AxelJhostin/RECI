@@ -3,8 +3,9 @@
 // El Monitor Serial envía C para iniciar una lectura: la cámara toma tres
 // fotos con iluminación externa. Cada foto aporta un voto del proveedor y
 // otro del modelo local; el Mega abre una compuerta solo si existe una mayoría
-// simple entre los hasta seis votos válidos. El resultado final (ya votado) se
-// registra una sola vez en recycle_events; si nadie fue
+// simple priorizando la mayoría del proveedor y usando el modelo local como
+// respaldo. El resultado final (ya votado) se registra una sola vez en
+// recycle_events; si nadie fue
 // identificado, el Mega muestra en el OLED el QR para reclamar los puntos
 // desde la app — ver docs/DECISION-QR-RECLAMO.md.
 
@@ -214,13 +215,32 @@ void addVote(MaterialVotes& votes, const String& material, float confidence) {
   }
 }
 
-String winningMaterial(const MaterialVotes& votes) {
+String majorityMaterial(const MaterialVotes& votes) {
   const uint8_t totalValidVotes = votes.plastico + votes.vidrio;
   // Una sola predicción nunca abre una compuerta. Desconocido es una
   // abstención, así que no cuenta dentro de este mínimo ni rompe empates.
   if (totalValidVotes < 2) return "desconocido";
   if (votes.plastico > votes.vidrio) return "plastico";
   if (votes.vidrio > votes.plastico) return "vidrio";
+  return "desconocido";
+}
+
+String chooseMaterial(const MaterialVotes& providerVotes,
+                      const MaterialVotes& localVotes,
+                      bool& usedProvider) {
+  const String providerMaterial = majorityMaterial(providerVotes);
+  if (providerMaterial != "desconocido") {
+    usedProvider = true;
+    return providerMaterial;
+  }
+
+  const String localMaterial = majorityMaterial(localVotes);
+  if (localMaterial != "desconocido") {
+    usedProvider = false;
+    return localMaterial;
+  }
+
+  usedProvider = false;
   return "desconocido";
 }
 
@@ -266,6 +286,8 @@ void classifyResidue() {
   sendMega("CMD:FACE:thinking");
   showOnLcd("Analizando residuo", "No lo retires");
   MaterialVotes votes;
+  MaterialVotes providerVotes;
+  MaterialVotes localVotes;
 
   for (uint8_t index = 0; index < kCaptureCount; ++index) {
     camera_fb_t* frame = captureIlluminatedFrame();
@@ -298,6 +320,11 @@ void classifyResidue() {
       const String voteMaterial = vote["material"].as<String>();
       const float voteConfidence = vote["confidence"] | 0.0F;
       addVote(votes, voteMaterial, voteConfidence);
+      if (source == "openai_sistema_experto") {
+        addVote(providerVotes, voteMaterial, voteConfidence);
+      } else if (source == "modelo_local") {
+        addVote(localVotes, voteMaterial, voteConfidence);
+      }
       ++receivedVotes;
 
       if (source == "openai_sistema_experto") {
@@ -315,6 +342,7 @@ void classifyResidue() {
       const String material = document["material"].as<String>();
       const float confidence = document["confidence"] | 0.0F;
       addVote(votes, material, confidence);
+      addVote(providerVotes, material, confidence);
       Serial.printf("foto %u: respaldo=%s (%.2f)\n", index + 1, material.c_str(), confidence);
     } else {
       Serial.printf(
@@ -333,8 +361,19 @@ void classifyResidue() {
       votes.plastico,
       votes.vidrio,
       votes.abstenciones);
+  Serial.printf(
+      "Votos OpenAI: plastico=%u | vidrio=%u | abstenciones=%u\n",
+      providerVotes.plastico,
+      providerVotes.vidrio,
+      providerVotes.abstenciones);
+  Serial.printf(
+      "Votos modelo: plastico=%u | vidrio=%u | abstenciones=%u\n",
+      localVotes.plastico,
+      localVotes.vidrio,
+      localVotes.abstenciones);
 
-  const String material = winningMaterial(votes);
+  bool usedProvider = false;
+  const String material = chooseMaterial(providerVotes, localVotes, usedProvider);
   if (material == "desconocido") {
     Serial.println(F("Resultado: DESCONOCIDO (sin mayoria segura)"));
     sendMega("CMD:FACE:confused");
@@ -345,9 +384,18 @@ void classifyResidue() {
   Serial.print(F("Resultado final: "));
   Serial.println(material);
 
+  Serial.print(F("Regla de decision: "));
+  Serial.println(usedProvider ? F("mayoria OpenAI/sistema experto")
+                              : F("respaldo por mayoria del modelo local"));
+
+  const MaterialVotes& winningVotes = usedProvider ? providerVotes : localVotes;
   const float winningConfidence = material == "plastico"
-      ? (votes.plastico > 0 ? votes.plasticoConfidence / votes.plastico : 0.0F)
-      : (votes.vidrio > 0 ? votes.vidrioConfidence / votes.vidrio : 0.0F);
+      ? (winningVotes.plastico > 0
+          ? winningVotes.plasticoConfidence / winningVotes.plastico
+          : 0.0F)
+      : (winningVotes.vidrio > 0
+          ? winningVotes.vidrioConfidence / winningVotes.vidrio
+          : 0.0F);
   const String claimCode = recordRecycleEvent(material, winningConfidence);
 
   sendMega("CMD:CLASSIFY:" + material);

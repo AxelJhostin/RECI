@@ -10,7 +10,9 @@ dentro de una misma foto.
 
 La ESP32-CAM mantiene tres capturas por depósito: esto produce seis
 predicciones visibles, tres del modelo propio y tres del proveedor, sobre
-exactamente las mismas imágenes.
+exactamente las mismas imágenes. Para decidir, se usa la mayoría interna de
+OpenAI+sistema experto; el modelo local solo actúa como respaldo cuando
+OpenAI no logra mayoría. En un empate global 3–3 gana la mayoría de OpenAI.
 
 No persiste imágenes ni atributos: cada petición es independiente. Ver
 [`docs/DECISION-SERVICIO-VISION.md`](../../docs/DECISION-SERVICIO-VISION.md)
@@ -47,9 +49,10 @@ la plantilla de pruebas antes del despliegue.
 El modelo local solo conoce `plastico` y `vidrio`. Por eso esta votación se
 prueba únicamente con residuos de esas dos clases. `desconocido` del
 proveedor es una abstención: queda registrado como diagnóstico y no suma a
-ningún material. Tras las tres fotos, el firmware abre solo si hay al menos
-dos votos válidos y una mayoría sin empate. Si el runtime o el archivo TFLite
-no están disponibles, cada foto conserva el único voto del proveedor.
+ningún material. Tras las tres fotos, el firmware acepta la mayoría de OpenAI
+si existe; si OpenAI no logra mayoría, consulta la mayoría local. Si ninguna
+señal tiene mayoría estricta, devuelve `desconocido`. Si el runtime o el
+archivo TFLite no están disponibles, conserva el flujo del proveedor.
 
 ## Desarrollo local
 
@@ -191,10 +194,10 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 
 ## Próximos pasos
 
-- **Validar el voto de seis señales con la ESP32-CAM**: registrar por cada
-  una de las tres fotos el resultado de OpenAI y el local, y al final contar
-  plástico, vidrio y abstenciones. No mezclar las señales por confianza antes
-  de la mayoría; revisar la matriz de confusión con imágenes reales.
+- **Validar la política primaria + respaldo con la ESP32-CAM**: registrar por
+  cada una de las tres fotos el resultado de OpenAI y el local, y al final
+  contar plástico, vidrio y abstenciones por señal. Revisar la matriz de
+  confusión con imágenes reales antes de cambiar la prioridad.
 - **Adaptar el modelo si hace falta**: si existe una brecha entre la cámara
   de Mac usada en el entrenamiento y la ESP32-CAM, hacer fine-tuning con el
   dataset nuevo en vez de entrenar desde cero.

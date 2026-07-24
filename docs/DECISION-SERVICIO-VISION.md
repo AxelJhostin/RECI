@@ -55,11 +55,13 @@ ESP32-CAM <- { material, confidence, rule_applied } -> reenvía CMD:OPEN:<materi
 ```
 
 Las tres fotos generan seis predicciones comparables porque ambos modelos
-analizan las mismas imágenes. La ESP32-CAM suma los votos de plástico y vidrio
-sin ponderarlos; `desconocido` es una abstención. Con empate o menos de dos
-votos válidos, responde `desconocido`. Esta configuración se valida solo con
-objetos de plástico o vidrio porque el modelo local binario no reconoce latas,
-orgánicos ni cartón.
+analizan las mismas imágenes. La ESP32-CAM conserva los seis diagnósticos, pero
+decide primero con la mayoría interna de OpenAI+sistema experto. Si OpenAI no
+logra mayoría, consulta la mayoría del modelo local; un empate global 3–3 se
+resuelve a favor de OpenAI cuando este tiene mayoría interna. `desconocido` es
+abstención y, si ninguna señal tiene mayoría estricta, no se abre la
+compuerta. Esta configuración se valida solo con objetos de plástico o vidrio
+porque el modelo local binario no reconoce latas, orgánicos ni cartón.
 
 El servicio de visión no guarda fotos ni atributos: cada petición es
 independiente. El log queda en la salida estándar del contenedor (no en

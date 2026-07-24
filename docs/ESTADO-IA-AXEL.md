@@ -51,18 +51,18 @@ Commits relacionados:
 - Se portó el MobileNetV2/TFLite de RECI2 (`run_20260721_2129`) al servicio.
   Cada una de las tres fotos ahora se analiza con OpenAI y con el modelo
   propio, produciendo seis predicciones sobre tres capturas.
-- La decisión se cambió a una mayoría simple de hasta seis votos: tres de
-  OpenAI+sistema experto y tres del modelo local. `desconocido` es abstención,
-  no tiene peso; empate o menos de dos votos válidos produce `desconocido`.
-  El cambio responde a una matriz manual de 14 pruebas, donde la ponderación
-  descartaba aciertos del modelo local.
+- La decisión conserva los seis votos, pero prioriza la mayoría interna de
+  OpenAI+sistema experto porque la matriz actual muestra mejor rendimiento.
+  Si OpenAI no tiene mayoría, se consulta la mayoría del modelo local; un
+  empate global 3–3 se resuelve con OpenAI cuando tiene mayoría interna. Si
+  ninguna señal tiene mayoría estricta, se devuelve `desconocido`.
 - Si el modelo local no carga, se conserva el flujo anterior de OpenAI,
   heurísticas y sistema experto.
 - La prueba de portabilidad del TFLite acertó **13/15** imágenes reales
   etiquetadas de RECI2. Los dos errores fueron el par ambiguo Gatorade
   vidrio/plástico; se mantiene la validación con objetos reales antes de
   entrenar una versión nueva del modelo.
-- Resultado técnico después de la integración: **13/13 pruebas del servicio
+- Resultado técnico después de la integración: **16/16 pruebas del servicio
   de visión** y **118/118 pruebas del sistema experto** aprobadas.
 - La integración de OpenAI tiene pruebas unitarias sin red y una prueba real
   completada contra el endpoint local.
@@ -117,12 +117,12 @@ ajustará mediante fine-tuning con el dataset propio.
 2. Crear el flujo de captura con vista en vivo para supervisar cada ronda de
    fotos mientras se guardan por clase.
 3. Evaluar el modelo integrado frente al dataset de la ESP32-CAM y construir
-   una matriz de confusión separada para OpenAI, MobileNetV2 y la mayoría de
-   seis votos.
+   una matriz de confusión separada para OpenAI, MobileNetV2 y la política
+   primaria + respaldo.
 4. Hacer transfer learning/reentrenamiento de MobileNetV2 si la evaluación
    muestra que el modelo previo no se adapta bien a la cámara real.
-5. Ajustar la política de abstenciones o el mínimo de votos únicamente con
-   resultados reales revisados con Paula.
+5. Ajustar la prioridad o el respaldo local únicamente con resultados reales
+   revisados con Paula.
 6. Validar OpenAI con fotos reales (precisión, latencia y costo); usar Claude
    o Gemini solo como comparación cuando aparezca un caso ambiguo.
 
