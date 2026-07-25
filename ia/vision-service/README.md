@@ -12,7 +12,10 @@ La ESP32-CAM mantiene tres capturas por depósito: esto produce seis
 predicciones visibles, tres del modelo propio y tres del proveedor, sobre
 exactamente las mismas imágenes. Para decidir, se usa la mayoría interna de
 OpenAI+sistema experto; el modelo local solo actúa como respaldo cuando
-OpenAI no logra mayoría. En un empate global 3–3 gana la mayoría de OpenAI.
+OpenAI no logra mayoría. El empate global de las seis señales no se resuelve
+sumando pesos: primero se revisa la mayoría de OpenAI y, si no existe, la
+mayoría local. Si ninguna fuente tiene mayoría estricta, el resultado es
+`desconocido`.
 
 No persiste imágenes ni atributos: cada petición es independiente. Ver
 [`docs/DECISION-SERVICIO-VISION.md`](../../docs/DECISION-SERVICIO-VISION.md)
@@ -142,11 +145,25 @@ python3 scripts/capturar_dataset_esp32cam.py \
   --interval 2
 ```
 
-El script no requiere dependencias adicionales. En la terminal usa `P` para
+El script no requiere dependencias adicionales. La página de diagnóstico usa
+capturas cortas periódicas, no un stream HTTP permanente, para que Safari y el
+script puedan acceder a `/capture` sin bloquearse entre sí. En la terminal usa `P` para
 guardar una ronda de 100 fotos en `dataset-esp32cam/plastico/`, `V` para una
 ronda en `dataset-esp32cam/vidrio/` y `Q` para salir. El sketch de diagnóstico
 expone `GET /capture`; al terminar se vuelve a cargar el firmware normal de
 Reci.
+
+## Validación con la ESP32-CAM
+
+El modelo local se evaluó sin OpenAI sobre 1.000 capturas QVGA etiquetadas:
+500 de plástico y 500 de vidrio. Obtuvo 716/1.000 aciertos (71,60 %):
+303/500 en plástico (60,60 %) y 413/500 en vidrio (82,60 %). Las 300
+capturas nuevas realizadas con mejor iluminación alcanzaron 232/300 (77,33 %).
+
+En pruebas físicas con mejor iluminación, el sistema combinado OpenAI + modelo
+local alcanzó aproximadamente 85 % de acierto en una batería de 32 pruebas.
+Esta métrica corresponde al resultado final del sistema de seis votos y no debe
+confundirse con la evaluación aislada del modelo local.
 
 `tests/fotos_dificiles/` trae casos reales que ya fallaron en `dev/RECI` —
 por ejemplo `gatorade_vidrio_473ml.jpeg` (TM 99.8% "plastico" y Claude Sonnet
@@ -194,13 +211,13 @@ proxy que limite su acceso al backend de Reci — igual que `face-service`.
 
 ## Próximos pasos
 
-- **Validar la política primaria + respaldo con la ESP32-CAM**: registrar por
-  cada una de las tres fotos el resultado de OpenAI y el local, y al final
-  contar plástico, vidrio y abstenciones por señal. Revisar la matriz de
-  confusión con imágenes reales antes de cambiar la prioridad.
-- **Adaptar el modelo si hace falta**: si existe una brecha entre la cámara
-  de Mac usada en el entrenamiento y la ESP32-CAM, hacer fine-tuning con el
-  dataset nuevo en vez de entrenar desde cero.
+- **Ampliar la validación con la ESP32-CAM**: conservar pruebas balanceadas por
+  clase, objeto y sesión para separar el efecto de la iluminación de la
+  capacidad de generalización del modelo.
+- **Adaptar el modelo si hace falta**: la evaluación actual muestra una brecha
+  entre el conjunto original y las capturas de la ESP32-CAM. Si se dispone de
+  suficientes objetos variados, hacer fine-tuning con un conjunto separado de
+  entrenamiento, validación y prueba.
 - **Recalibrar `visual_heuristics.py`**: los umbrales de brillo/color se
   afinaron con fotos de ~1280×720; la ESP32-CAM captura a 320×240
   (`FRAMESIZE_QVGA`) o menos. Conviene validar con fotos reales de la
