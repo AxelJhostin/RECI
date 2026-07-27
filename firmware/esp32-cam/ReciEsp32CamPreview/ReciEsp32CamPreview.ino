@@ -25,10 +25,9 @@
 namespace {
 
 httpd_handle_t previewServer = nullptr;
-// Safari y la clasificación compiten por los framebuffers de la cámara. Al
-// recibir C detenemos temporalmente el stream, de modo que las tres fotos de
-// clasificación siempre puedan obtener un buffer. Safari conserva el último
-// fotograma y se actualiza otra vez al finalizar la lectura.
+// Safari y la clasificación compiten por los framebuffers de la cámara. La
+// página usa capturas cortas (en vez de un stream HTTP permanente), así que
+// /capture queda disponible para el script y para las tres fotos de C.
 volatile bool classificationInProgress = false;
 
 // El firmware normal usa un solo framebuffer porque solo toma una foto cada
@@ -81,7 +80,31 @@ constexpr char kIndexHtml[] = R"HTML(
 <style>body{margin:0;background:#111;color:#eee;font:16px system-ui;text-align:center}main{max-width:900px;margin:24px auto;padding:0 16px}img{width:100%;max-width:800px;border-radius:12px;background:#222}code{background:#222;padding:3px 6px;border-radius:4px}</style>
 </head><body><main><h1>Reci · Vista de diagnóstico</h1>
 <p>Deja esta página abierta y envía <code>C</code> por el Monitor Serial para clasificar.</p>
-<img src="/stream" alt="Stream de la ESP32-CAM">
+<img id="preview" src="/capture" alt="Vista de la ESP32-CAM">
+<script>
+const preview = document.getElementById('preview');
+let busy = false;
+async function refreshPreview() {
+  if (busy) return;
+  busy = true;
+  try {
+    const response = await fetch('/capture?ts=' + Date.now(), {cache:'no-store'});
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const blob = await response.blob();
+    const nextUrl = URL.createObjectURL(blob);
+    const oldUrl = preview.dataset.objectUrl;
+    preview.src = nextUrl;
+    preview.dataset.objectUrl = nextUrl;
+    if (oldUrl) URL.revokeObjectURL(oldUrl);
+  } catch (error) {
+    console.warn('No se pudo actualizar la vista', error);
+  } finally {
+    busy = false;
+  }
+}
+setInterval(refreshPreview, 500);
+refreshPreview();
+</script>
 <p>Captura puntual: <code>/capture</code></p></main></body></html>
 )HTML";
 
@@ -108,43 +131,13 @@ esp_err_t captureHandler(httpd_req_t* request) {
   return result;
 }
 
-esp_err_t streamHandler(httpd_req_t* request) {
-  static constexpr char kStreamContentType[] = "multipart/x-mixed-replace;boundary=reci-frame";
-  static constexpr char kBoundary[] = "\r\n--reci-frame\r\n";
-  static constexpr char kPartHeader[] = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
-
-  httpd_resp_set_type(request, kStreamContentType);
-  char header[80];
-
-  while (true) {
-    if (classificationInProgress) {
-      delay(20);
-      continue;
-    }
-    camera_fb_t* frame = esp_camera_fb_get();
-    if (frame == nullptr) return ESP_FAIL;
-
-    const int headerLength = snprintf(header, sizeof(header), kPartHeader,
-                                      static_cast<unsigned>(frame->len));
-    esp_err_t result = httpd_resp_send_chunk(request, kBoundary, strlen(kBoundary));
-    if (result == ESP_OK) result = httpd_resp_send_chunk(request, header, headerLength);
-    if (result == ESP_OK) {
-      result = httpd_resp_send_chunk(request,
-                                     reinterpret_cast<const char*>(frame->buf), frame->len);
-    }
-    esp_camera_fb_return(frame);
-    if (result != ESP_OK) return result;  // el navegador cerró el stream
-    delay(35);
-  }
-}
-
 void startPreviewServer() {
   if (previewServer != nullptr) return;
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   config.ctrl_port = 32769;
-  config.max_uri_handlers = 3;
+  config.max_uri_handlers = 2;
   config.stack_size = 8192;
 
   if (httpd_start(&previewServer, &config) != ESP_OK) {
@@ -154,10 +147,8 @@ void startPreviewServer() {
 
   httpd_uri_t indexUri = {.uri = "/", .method = HTTP_GET, .handler = indexHandler, .user_ctx = nullptr};
   httpd_uri_t captureUri = {.uri = "/capture", .method = HTTP_GET, .handler = captureHandler, .user_ctx = nullptr};
-  httpd_uri_t streamUri = {.uri = "/stream", .method = HTTP_GET, .handler = streamHandler, .user_ctx = nullptr};
   httpd_register_uri_handler(previewServer, &indexUri);
   httpd_register_uri_handler(previewServer, &captureUri);
-  httpd_register_uri_handler(previewServer, &streamUri);
 
   Serial.print(F("Vista previa lista: http://"));
   Serial.println(WiFi.localIP());

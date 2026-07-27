@@ -2,7 +2,8 @@
 """Captura rondas etiquetadas desde el ejemplo CameraWebServer de ESP32-CAM.
 
 La vista previa se abre por separado en el navegador (http://IP_DE_LA_CAMARA).
-Este script descarga la foto de /capture sin interrumpir el stream.
+Este script descarga capturas puntuales de /capture mientras la página se
+actualiza con solicitudes cortas.
 
 Uso:
     python3 scripts/capturar_dataset_esp32cam.py --camera http://192.168.100.53
@@ -15,6 +16,7 @@ Teclas:
 
 import argparse
 import select
+import socket
 import sys
 import termios
 import time
@@ -63,7 +65,7 @@ def capturar_ronda(clase: str, camera_url: str, dataset_dir: Path, cantidad: int
             descargar_foto(camera_url, destino)
             capturadas += 1
             print(f"\r  {clase}: {capturadas}/{cantidad}  {destino.name}", end="", flush=True)
-        except (URLError, TimeoutError, ValueError) as error:
+        except (URLError, socket.timeout, TimeoutError, ValueError) as error:
             print(f"\r  {clase}: error en foto {numero}/{cantidad}: {error}", flush=True)
 
         siguiente += intervalo
